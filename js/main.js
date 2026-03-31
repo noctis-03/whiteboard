@@ -2,6 +2,7 @@
 //  main.js — 애플리케이션 진입점
 //
 //  UPDATE: history 모듈 초기화 추가
+//  UPDATE: undo/redo 액션 버튼 연결
 // ═══════════════════════════════════════════════════
 
 import { resetView, toggleGrid } from './transform.js';
@@ -19,7 +20,7 @@ import { addCardWindow } from './card.js';
 import { createStartupWindow } from './startup.js';
 import { mkSvg, setAttrs } from './svg.js';
 import { initToolbar } from './toolbar.js';
-import { initHistory } from './history.js';
+import { initHistory, undo, redo } from './history.js';  // ← undo, redo 추가 import
 
 persistence._svg = { mkSvg, setAttrs };
 
@@ -56,6 +57,8 @@ function init() {
     save:        () => saveBoard(),
     load:        () => document.getElementById('load-in').click(),
     clearAll:    () => clearAll(),
+    undo:        () => undo(),    // ← NEW
+    redo:        () => redo(),    // ← NEW
   };
   document.querySelectorAll('[data-action]').forEach(btn => {
     const fn = actions[btn.dataset.action];
@@ -76,7 +79,6 @@ function init() {
   createStartupWindow();
 
   // ── 히스토리 초기화 (초기 상태 기록) ──
-  // 스타트업 윈도우가 생성된 뒤 약간의 딜레이로 초기 스냅샷 저장
   setTimeout(() => initHistory(), 100);
 
   console.log('∞ Canvas 0.01 — Modular loaded');
