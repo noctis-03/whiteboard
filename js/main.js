@@ -3,6 +3,7 @@
 //
 //  UPDATE: history 모듈 초기화 추가
 //  UPDATE: undo/redo 액션 버튼 연결
+//  UPDATE: toolOrb 모듈 추가
 // ═══════════════════════════════════════════════════
 
 import { resetView, toggleGrid } from './transform.js';
@@ -20,7 +21,8 @@ import { addCardWindow } from './card.js';
 import { createStartupWindow } from './startup.js';
 import { mkSvg, setAttrs } from './svg.js';
 import { initToolbar } from './toolbar.js';
-import { initHistory, undo, redo } from './history.js';  // ← undo, redo 추가 import
+import { initHistory, undo, redo } from './history.js';
+import { initToolOrb } from './toolOrb.js';  // ← NEW
 
 persistence._svg = { mkSvg, setAttrs };
 
@@ -34,6 +36,7 @@ function init() {
   initImageInput();
   initPersistence();
   initToolbar();
+  initToolOrb();   // ← NEW
 
   // 줌 리셋
   document.getElementById('zoom-pill').addEventListener('click', resetView);
@@ -57,8 +60,8 @@ function init() {
     save:        () => saveBoard(),
     load:        () => document.getElementById('load-in').click(),
     clearAll:    () => clearAll(),
-    undo:        () => undo(),    // ← NEW
-    redo:        () => redo(),    // ← NEW
+    undo:        () => undo(),
+    redo:        () => redo(),
   };
   document.querySelectorAll('[data-action]').forEach(btn => {
     const fn = actions[btn.dataset.action];
