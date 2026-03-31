@@ -180,6 +180,7 @@ body{
 
 /* ══════════════════════════════════════════════════════
    TOOLBAR — 항상 가로, 드래그 이동, 모서리 자석 스냅
+   화면 폭에 맞게 축소, 내부 스크롤
 ══════════════════════════════════════════════════════ */
 #toolbar{
   position:fixed;
@@ -195,7 +196,9 @@ body{
   gap:4px;
   padding:6px 8px;
   transition:box-shadow .15s;
-  /* 초기 위치는 JS에서 설정 */
+  /* ── 핵심: 화면에 맞게 축소 ── */
+  max-width:calc(100vw - 24px);  /* 양쪽 12px 갭 */
+  width:max-content;             /* 콘텐츠 자연 너비가 기본 */
 }
 #toolbar.tb-dragging{
   box-shadow:0 14px 40px rgba(26,23,20,0.22);
