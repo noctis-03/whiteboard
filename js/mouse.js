@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  mouse.js — 마우스 이벤트 핸들링
 //
-//  UPDATE: 드래그/리사이즈/지우개 완료 시 pushState() 호출
+//  UPDATE: orbLock 활성 시 모든 도구 동작 차단
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -13,6 +13,7 @@ import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
 import { focusEditable } from './edit.js';
 import { pushState } from './history.js';
+import { orbLock } from './toolOrb.js';  // ← NEW
 
 let justFinishedLasso = false;
 
@@ -31,6 +32,7 @@ export function initMouseEvents() {
 
   // Mouse down
   S.vp.addEventListener('mousedown', e => {
+    if (orbLock) return;   // ★ Orb 드래그 중 차단
     if (e.button === 2) return;
     closeCtx();
 
@@ -49,7 +51,6 @@ export function initMouseEvents() {
     if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); return; }
     if (S.tool === 'text') { addText(bp); pushState(); return; }
 
-    // ── 편집 도구 ──
     if (S.tool === 'edit') {
       const elDiv = e.target.closest('.el');
       if (elDiv) {
@@ -75,6 +76,7 @@ export function initMouseEvents() {
 
   // Mouse move
   window.addEventListener('mousemove', e => {
+    if (orbLock) return;   // ★ Orb 드래그 중 차단
     justFinishedLasso = false;
 
     if (S.panning) {
@@ -107,6 +109,7 @@ export function initMouseEvents() {
 
   // Mouse up
   window.addEventListener('mouseup', e => {
+    if (orbLock) return;   // ★ Orb 드래그 중 차단
     document.body.classList.remove('panning');
     if (S.panning) { S.setPanning(false); return; }
     if (S.dragging) { S.setDragging(null); updateMinimap(); pushState(); return; }
