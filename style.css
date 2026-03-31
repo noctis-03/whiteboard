@@ -518,25 +518,33 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
 
 /* ══════════════════════════════════════════════════════
    선택 예정(미리보기) 표시 — 리디자인
-   부드러운 필 배경 + 스케일 팝 + 하단 인디케이터
 ══════════════════════════════════════════════════════ */
+
+/* ★ 핵심: zoom 모드에서 overflow를 풀어야 버튼이 안 잘림 */
+#toolbar.tb-orb-zoom #tb-tools {
+  overflow: visible;
+}
+
 .tbtn.orb-preview {
   background: var(--ink) !important;
   color: var(--panel) !important;
   transform: scale(1.18);
-  box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.25),
-              0 4px 12px rgba(26, 23, 20, 0.18);
   border-radius: 10px;
-  transition: transform .15s cubic-bezier(.34,1.56,.64,1),
-              background .12s, color .12s, box-shadow .15s;
   z-index: 10;
+  /* box-shadow 대신 outline 사용 — overflow에 영향 안 받음 */
+  outline: 2.5px solid var(--accent2);
+  outline-offset: 2px;
+  box-shadow: 0 4px 14px rgba(26, 23, 20, 0.22);
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1),
+              background .12s, color .12s, box-shadow .15s,
+              outline-color .12s;
 }
 
 /* 하단 도트 인디케이터 */
 .tbtn.orb-preview::before {
   content: '';
   position: absolute;
-  bottom: -2px;
+  bottom: -6px;
   left: 50%;
   transform: translateX(-50%);
   width: 6px;
@@ -558,7 +566,6 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   transition: opacity .15s;
 }
 
-/* 현재 active 상태 버튼도 미리보기가 아니면 dim */
 #toolbar.tb-orb-zoom .tbtn.active:not(.orb-preview) {
   opacity: 0.55;
   background: color-mix(in srgb, var(--ink) 60%, transparent);
