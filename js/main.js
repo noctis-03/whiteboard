@@ -18,11 +18,10 @@ import { addSticky } from './sticky.js';
 import { addCardWindow } from './card.js';
 import { createStartupWindow } from './startup.js';
 import { mkSvg, setAttrs } from './svg.js';
+import { initToolbar } from './toolbar.js';
 
-// ── SVG 모듈을 persistence에 주입 (순환 참조 방지) ──
 persistence._svg = { mkSvg, setAttrs };
 
-// ── 초기화 ──
 function init() {
   initLayout();
   initPenPanel();
@@ -32,13 +31,12 @@ function init() {
   initContextMenu();
   initImageInput();
   initPersistence();
-
-  // ── 툴바 이벤트 바인딩 (data 속성 기반) ──
+  initToolbar();
 
   // 줌 리셋
   document.getElementById('zoom-pill').addEventListener('click', resetView);
 
-  // 도구 선택 버튼 — #toolbar 내부의 버튼만 대상으로 함 (body[data-tool] 충돌 방지)
+  // 도구 선택 버튼
   document.querySelectorAll('#toolbar [data-tool]').forEach(btn => {
     btn.addEventListener('click', () => setTool(btn.dataset.tool));
   });
@@ -63,26 +61,22 @@ function init() {
     if (fn) btn.addEventListener('click', fn);
   });
 
-  // 색상 선택
-  document.querySelectorAll('.cdot').forEach(el => {
+  // 색상 선택 — #color-bar 내의 .cdot 대상
+  document.querySelectorAll('#color-bar .cdot').forEach(el => {
     el.addEventListener('click', () => setColor(el));
   });
 
-  // 선 굵기 선택
-  document.querySelectorAll('.sbtn').forEach(el => {
+  // 선 굵기 선택 — #color-bar 내의 .sbtn 대상
+  document.querySelectorAll('#color-bar .sbtn').forEach(el => {
     el.addEventListener('click', () => setStroke(el, parseInt(el.dataset.sw)));
   });
 
-  // ── 자동 저장 시작 ──
   autoSave();
-
-  // ── 시작 윈도우 표시 ──
   createStartupWindow();
 
   console.log('∞ Canvas 0.01 — Modular loaded');
 }
 
-// DOM 준비 후 초기화
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
