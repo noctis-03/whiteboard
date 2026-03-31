@@ -1,5 +1,11 @@
 // ═══════════════════════════════════════════════════
 //  selection.js — 선택, 올가미, 드래그, 리사이즈
+//
+//  FIX: Shift/Ctrl 클릭 다중 선택이 작동하지 않던 버그 수정
+//  원인: select()에서 이미 선택된 요소를 다시 additive로 추가할 때
+//        includes 체크에 걸려 무시됨.
+//        additive=true일 때 이미 선택된 요소를 클릭하면
+//        토글(선택 해제)로 동작하도록 수정
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -7,8 +13,24 @@ import { b2s, s2b } from './transform.js';
 import { updateMinimap } from './layout.js';
 
 export function select(el, additive = false) {
-  if (!additive) deselectAll();
-  if (S.selectedEls.includes(el)) return;
+  if (!additive) {
+    deselectAll();
+  }
+
+  // additive 모드에서 이미 선택된 요소 → 토글(선택 해제)
+  const idx = S.selectedEls.indexOf(el);
+  if (idx !== -1) {
+    if (additive) {
+      // 선택 해제
+      S.selectedEls.splice(idx, 1);
+      el.classList.remove('selected');
+      const handles = el.querySelector('.el-handles');
+      if (handles) handles.style.display = 'none';
+      S.setSelected(S.selectedEls.length > 0 ? S.selectedEls[S.selectedEls.length - 1] : null);
+    }
+    return;
+  }
+
   S.pushSelectedEl(el);
   S.setSelected(el);
   el.classList.add('selected');
