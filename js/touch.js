@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  touch.js — 터치 이벤트 (1-finger, 핀치줌)
+//
+//  ADD: 편집(edit) 도구 터치 지원
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -9,6 +11,7 @@ import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, c
 import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt } from './drawing.js';
 import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
+import { focusEditableTouch } from './edit.js';
 
 function cancelSingleFingerActions() {
   if (S.drawing) {
@@ -29,7 +32,6 @@ export function initTouchEvents() {
   S.vp.addEventListener('touchstart', e => {
     cancelLongPress();
     if (e.touches.length === 2) {
-      // Pinch start
       cancelSingleFingerActions();
       const t0 = e.touches[0], t1 = e.touches[1];
       S.setPinchDist(Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY));
@@ -54,6 +56,20 @@ export function initTouchEvents() {
     if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(bp); e.preventDefault(); return; }
     if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); e.preventDefault(); return; }
     if (S.tool === 'text') { addText(bp); e.preventDefault(); return; }
+
+    // ── 편집 도구 터치 ──
+    if (S.tool === 'edit') {
+      const elDiv = e.target.closest('.el');
+      if (elDiv) {
+        focusEditableTouch(elDiv, t);
+        // preventDefault 하지 않음 — 키보드가 올라와야 함
+      } else {
+        const active = document.activeElement;
+        if (active && active !== document.body) active.blur();
+      }
+      return;
+    }
+
     if (S.tool === 'select') {
       if (!e.target.closest('.el')) {
         deselectAll();
@@ -91,6 +107,9 @@ export function initTouchEvents() {
     if (e.touches.length !== 1) return;
     cancelLongPress();
     const t = e.touches[0];
+
+    // edit 도구에서는 터치 드래그 무시 (텍스트 선택 허용)
+    if (S.tool === 'edit') return;
 
     if (S.touchPanOrigin) {
       const r = getVpRect();
