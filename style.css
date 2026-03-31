@@ -417,3 +417,65 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   }
 }
 
+
+/* ══════════════════════════════════════════════════════
+   Tool Orb — 포인터 근처 따라다니는 도구 전환 원
+══════════════════════════════════════════════════════ */
+#tool-orb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  z-index: 1100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: color-mix(in srgb, var(--panel) 85%, white 15%);
+  border: 1.5px solid color-mix(in srgb, var(--border) 70%, white 30%);
+  box-shadow: 0 4px 14px rgba(26, 23, 20, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+
+  opacity: 0;
+  transform: translate(-200px, -200px);
+  transition: opacity 0.2s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  will-change: transform;
+}
+
+#tool-orb.orb-visible {
+  opacity: 0.72;
+}
+
+#tool-orb.orb-active {
+  opacity: 1 !important;
+  background: var(--ink);
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 4px rgba(43, 108, 176, 0.18), 0 6px 20px rgba(26, 23, 20, 0.22);
+}
+
+#tool-orb-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#tool-orb.orb-active #tool-orb-label {
+  color: var(--panel);
+}
+
+/* Orb 드래그 미리보기 시 툴바 버튼 하이라이트 */
+.tbtn.orb-preview {
+  background: rgba(43, 108, 176, 0.18) !important;
+  outline: 2px solid var(--accent2);
+  outline-offset: 1px;
+  color: var(--ink) !important;
+}
+
