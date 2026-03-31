@@ -1,207 +1,202 @@
 // ═══════════════════════════════════════════════════
-//  toolbar.js — 툴바 드래그 이동, 모서리 자석 스냅,
-//               색상 바 반응형 위치 제어
+//  toolbar.js — 드래그 이동 & 모서리 스냅 & 컬러바
 // ═══════════════════════════════════════════════════
 
-const SNAP_DIST = 60;   // 자석 흡착 거리 (px)
-const SNAP_GAP  = 12;   // 모서리와의 갭 (px)
-const DRAW_TOOLS = ['pen', 'highlight', 'eraser', 'rect', 'circle', 'arrow', 'text'];
+import { tool } from './state.js';
 
-let tb, cb;
-let dragging = false;
-let dragOff = { x: 0, y: 0 };
+const SNAP_DIST  = 60;   // px — 이 거리 안이면 모서리로 끌려감
+const SNAP_GAP   = 12;   // px — 모서리 / 가장자리와의 간격
+const DRAW_TOOLS = ['pen','highlight','eraser','rectangle','circle','arrow'];
 
+let tb, colorBar;
+let isDragging = false;
+let dragOX = 0, dragOY = 0;
+
+/* ── 실제 렌더 크기 ─────────────────────────────── */
+function tbSize() {
+  const r = tb.getBoundingClientRect();
+  return { w: r.width, h: r.height };
+}
+
+/* ── 초기 위치 (하단 중앙) ────────────────────────── */
+function setInitialPosition() {
+  const { w, h } = tbSize();
+  const x = Math.round((window.innerWidth  - w) / 2);
+  const y = window.innerHeight - h - SNAP_GAP;
+  tb.style.left = x + 'px';
+  tb.style.top  = y + 'px';
+}
+
+/* ── 드래그 시작 ──────────────────────────────────── */
+function startDrag(e) {
+  const ev = e.touches ? e.touches[0] : e;
+  const rect = tb.getBoundingClientRect();
+  dragOX = ev.clientX - rect.left;
+  dragOY = ev.clientY - rect.top;
+  isDragging = true;
+  tb.classList.add('tb-dragging');
+  tb.classList.remove('tb-snapping');
+
+  document.addEventListener('mousemove', moveTo);
+  document.addEventListener('mouseup',   endDrag);
+  document.addEventListener('touchmove', moveTo, {passive:false});
+  document.addEventListener('touchend',  endDrag);
+  e.preventDefault();
+}
+
+/* ── 이동 (뷰포트 안에 제한) ──────────────────────── */
+function moveTo(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+  const ev = e.touches ? e.touches[0] : e;
+  const { w, h } = tbSize();
+
+  let x = ev.clientX - dragOX;
+  let y = ev.clientY - dragOY;
+
+  // 뷰포트 안으로 제한
+  x = Math.max(0, Math.min(x, window.innerWidth  - w));
+  y = Math.max(0, Math.min(y, window.innerHeight - h));
+
+  tb.style.left = x + 'px';
+  tb.style.top  = y + 'px';
+
+  updateColorBarPosition();
+}
+
+/* ── 드래그 종료 → 스냅 ──────────────────────────── */
+function endDrag() {
+  isDragging = false;
+  tb.classList.remove('tb-dragging');
+  document.removeEventListener('mousemove', moveTo);
+  document.removeEventListener('mouseup',   endDrag);
+  document.removeEventListener('touchmove', moveTo);
+  document.removeEventListener('touchend',  endDrag);
+
+  snapToEdge();
+  updateColorBarPosition();
+}
+
+/* ── 가장자리 / 중앙 스냅 ────────────────────────── */
+function snapToEdge() {
+  const { w, h } = tbSize();
+  let x = parseFloat(tb.style.left) || 0;
+  let y = parseFloat(tb.style.top)  || 0;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // 수평 스냅
+  const distL = x;
+  const distR = vw - (x + w);
+  const distCX = Math.abs(x + w/2 - vw/2);
+
+  if (distL < SNAP_DIST)       x = SNAP_GAP;
+  else if (distR < SNAP_DIST)  x = vw - w - SNAP_GAP;
+  else if (distCX < SNAP_DIST) x = Math.round((vw - w) / 2);
+
+  // 수직 스냅
+  const distT = y;
+  const distB = vh - (y + h);
+  const distCY = Math.abs(y + h/2 - vh/2);
+
+  if (distT < SNAP_DIST)       y = SNAP_GAP;
+  else if (distB < SNAP_DIST)  y = vh - h - SNAP_GAP;
+  else if (distCY < SNAP_DIST) y = Math.round((vh - h) / 2);
+
+  tb.classList.add('tb-snapping');
+  tb.style.left = x + 'px';
+  tb.style.top  = y + 'px';
+
+  setTimeout(() => tb.classList.remove('tb-snapping'), 300);
+
+  updateTipDir(y);
+}
+
+/* ── 뷰포트 변경 시 위치 보정 ────────────────────── */
+function clampPosition() {
+  const { w, h } = tbSize();
+  let x = parseFloat(tb.style.left) || 0;
+  let y = parseFloat(tb.style.top)  || 0;
+
+  x = Math.max(0, Math.min(x, window.innerWidth  - w));
+  y = Math.max(0, Math.min(y, window.innerHeight - h));
+
+  tb.style.left = x + 'px';
+  tb.style.top  = y + 'px';
+}
+
+/* ── 툴팁 방향 ────────────────────────────────────── */
+function updateTipDir(y) {
+  const half = window.innerHeight / 2;
+  tb.dataset.tipDir = y < half ? 'below' : 'above';
+}
+
+/* ── 컬러바 표시 / 숨기기 ────────────────────────── */
+export function showColorBar() {
+  if (!colorBar) return;
+  colorBar.classList.add('visible');
+  updateColorBarPosition();
+}
+export function hideColorBar() {
+  if (!colorBar) return;
+  colorBar.classList.remove('visible');
+}
+
+/* ── 컬러바 위치 갱신 ────────────────────────────── */
+export function updateColorBarPosition() {
+  if (!colorBar || !colorBar.classList.contains('visible')) return;
+
+  const tr   = tb.getBoundingClientRect();
+  const cr   = colorBar.getBoundingClientRect();
+  const half = window.innerHeight / 2;
+
+  let cx = tr.left + (tr.width - cr.width) / 2;
+  let cy;
+
+  if (tr.top + tr.height / 2 > half) {
+    // 도구창이 아래쪽 → 컬러바는 위에
+    cy = tr.top - cr.height - SNAP_GAP;
+  } else {
+    // 도구창이 위쪽 → 컬러바는 아래에
+    cy = tr.bottom + SNAP_GAP;
+  }
+
+  // 화면 안으로 제한
+  cx = Math.max(4, Math.min(cx, window.innerWidth  - cr.width  - 4));
+  cy = Math.max(4, Math.min(cy, window.innerHeight - cr.height - 4));
+
+  colorBar.style.left = cx + 'px';
+  colorBar.style.top  = cy + 'px';
+}
+
+/* ── 그리기 도구 판별 ────────────────────────────── */
+export function isDrawTool(t) {
+  return DRAW_TOOLS.includes(t);
+}
+
+/* ── 초기화 ───────────────────────────────────────── */
 export function initToolbar() {
-  tb = document.getElementById('toolbar');
-  cb = document.getElementById('color-bar');
+  tb       = document.getElementById('toolbar');
+  colorBar = document.getElementById('color-bar');
 
-  // 초기 위치: 화면 하단 중앙
-  setInitialPosition();
+  if (!tb) return;
 
-  // 드래그 핸들 이벤트
+  // 드래그 핸들
   const handle = document.getElementById('tb-drag-handle');
+  if (handle) {
+    handle.addEventListener('mousedown',  startDrag);
+    handle.addEventListener('touchstart', startDrag, {passive:false});
+  }
 
-  handle.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    startDrag(e.clientX, e.clientY);
+  // 초기 위치를 레이아웃 완료 후 설정
+  requestAnimationFrame(() => {
+    setInitialPosition();
+    updateColorBarPosition();
   });
 
-  handle.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) return;
-    e.preventDefault();
-    startDrag(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: false });
-
-  window.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    moveTo(e.clientX - dragOff.x, e.clientY - dragOff.y);
-  });
-
-  window.addEventListener('touchmove', e => {
-    if (!dragging || e.touches.length !== 1) return;
-    e.preventDefault();
-    moveTo(e.touches[0].clientX - dragOff.x, e.touches[0].clientY - dragOff.y);
-  }, { passive: false });
-
-  window.addEventListener('mouseup', endDrag);
-  window.addEventListener('touchend', endDrag);
-
-  // 창 크기 변경 시 위치 보정
+  // 창 크기 변경 시 보정
   window.addEventListener('resize', () => {
     clampPosition();
     updateColorBarPosition();
   });
-}
-
-function setInitialPosition() {
-  const w = tb.offsetWidth || 600;
-  const h = tb.offsetHeight || 48;
-  const x = Math.round((window.innerWidth - w) / 2);
-  const y = window.innerHeight - h - SNAP_GAP;
-  tb.style.left = x + 'px';
-  tb.style.top = y + 'px';
-  updateTipDir();
-}
-
-function startDrag(cx, cy) {
-  const r = tb.getBoundingClientRect();
-  dragOff.x = cx - r.left;
-  dragOff.y = cy - r.top;
-  dragging = true;
-  tb.classList.add('tb-dragging');
-  tb.classList.remove('tb-snapping');
-}
-
-function moveTo(x, y) {
-  // 화면 밖으로 나가지 않게 제한
-  const maxX = window.innerWidth - tb.offsetWidth;
-  const maxY = window.innerHeight - tb.offsetHeight;
-  x = Math.max(0, Math.min(x, maxX));
-  y = Math.max(0, Math.min(y, maxY));
-  tb.style.left = x + 'px';
-  tb.style.top = y + 'px';
-  updateColorBarPosition();
-}
-
-function endDrag() {
-  if (!dragging) return;
-  dragging = false;
-  tb.classList.remove('tb-dragging');
-  snapToEdge();
-  updateTipDir();
-  updateColorBarPosition();
-}
-
-function snapToEdge() {
-  const r = tb.getBoundingClientRect();
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  const tw = r.width;
-  const th = r.height;
-  let x = r.left;
-  let y = r.top;
-
-  // 가장 가까운 모서리/변 계산
-  const distLeft   = r.left;
-  const distRight  = W - r.right;
-  const distTop    = r.top;
-  const distBottom = H - r.bottom;
-
-  // 수평 스냅
-  if (distLeft < SNAP_DIST) {
-    x = SNAP_GAP;
-  } else if (distRight < SNAP_DIST) {
-    x = W - tw - SNAP_GAP;
-  }
-
-  // 수직 스냅
-  if (distTop < SNAP_DIST) {
-    y = SNAP_GAP;
-  } else if (distBottom < SNAP_DIST) {
-    y = H - th - SNAP_GAP;
-  }
-
-  // 중앙 근처면 가로 중앙 스냅
-  const centerX = (W - tw) / 2;
-  if (Math.abs(r.left - centerX) < SNAP_DIST) {
-    x = centerX;
-  }
-
-  tb.classList.add('tb-snapping');
-  tb.style.left = Math.round(x) + 'px';
-  tb.style.top = Math.round(y) + 'px';
-
-  // 트랜지션 끝나면 클래스 제거
-  setTimeout(() => tb.classList.remove('tb-snapping'), 250);
-}
-
-function clampPosition() {
-  const maxX = window.innerWidth - tb.offsetWidth;
-  const maxY = window.innerHeight - tb.offsetHeight;
-  let x = parseFloat(tb.style.left) || 0;
-  let y = parseFloat(tb.style.top) || 0;
-  x = Math.max(0, Math.min(x, maxX));
-  y = Math.max(0, Math.min(y, maxY));
-  tb.style.left = x + 'px';
-  tb.style.top = y + 'px';
-}
-
-function updateTipDir() {
-  const r = tb.getBoundingClientRect();
-  const belowHalf = r.top > window.innerHeight / 2;
-  tb.setAttribute('data-tip-dir', belowHalf ? 'up' : 'down');
-}
-
-/**
- * 색상 바를 표시/숨김하고 위치를 결정
- */
-export function showColorBar() {
-  if (!cb) cb = document.getElementById('color-bar');
-  cb.classList.add('cb-visible');
-  updateColorBarPosition();
-}
-
-export function hideColorBar() {
-  if (!cb) cb = document.getElementById('color-bar');
-  cb.classList.remove('cb-visible');
-}
-
-export function updateColorBarPosition() {
-  if (!cb || !cb.classList.contains('cb-visible')) return;
-  if (!tb) tb = document.getElementById('toolbar');
-
-  const tr = tb.getBoundingClientRect();
-  const cbW = cb.offsetWidth || 280;
-  const cbH = cb.offsetHeight || 40;
-
-  // 툴바가 화면 상반부에 있으면 → 색상 바를 아래에
-  // 툴바가 화면 하반부에 있으면 → 색상 바를 위에
-  const tbMidY = tr.top + tr.height / 2;
-  const aboveHalf = tbMidY < window.innerHeight / 2;
-
-  let x = tr.left + (tr.width - cbW) / 2;
-  let y;
-
-  if (aboveHalf) {
-    // 색상 바를 툴바 아래에
-    y = tr.bottom + 8;
-  } else {
-    // 색상 바를 툴바 위에
-    y = tr.top - cbH - 8;
-  }
-
-  // 화면 밖 방지
-  x = Math.max(SNAP_GAP, Math.min(x, window.innerWidth - cbW - SNAP_GAP));
-  y = Math.max(SNAP_GAP, Math.min(y, window.innerHeight - cbH - SNAP_GAP));
-
-  cb.style.left = Math.round(x) + 'px';
-  cb.style.top = Math.round(y) + 'px';
-}
-
-/**
- * 현재 도구가 그리기 도구인지 확인
- */
-export function isDrawTool(t) {
-  return DRAW_TOOLS.includes(t);
 }
