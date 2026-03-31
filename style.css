@@ -485,44 +485,36 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
 #toolbar {
   transition: box-shadow .25s ease,
               transform .35s cubic-bezier(.25, .85, .35, 1.1),
-              border-color .25s ease,
-              padding .3s ease;
+              border-color .25s ease;
   transform-origin: center center;
 }
 
 #toolbar.tb-orb-zoom {
-  /* 가로는 살짝, 세로를 눈에 띄게 키움 */
-  transform: scale(1.04, 1.18);
-  padding-top: 10px;
-  padding-bottom: 10px;
+  transform: scale(1.06);
   box-shadow: 0 14px 42px rgba(26, 23, 20, 0.20),
               0 0 0 2.5px rgba(43, 108, 176, 0.12);
   border-color: color-mix(in srgb, var(--accent2) 35%, var(--border) 65%);
-  /* 둥실거리는 float 애니메이션 */
   animation: tb-float 2.4s ease-in-out infinite;
 }
 
-/* 둥실둥실 떠다니는 느낌 */
 @keyframes tb-float {
-  0%   { transform: scale(1.04, 1.18) translateY(0px); }
-  50%  { transform: scale(1.04, 1.18) translateY(-3.5px); }
-  100% { transform: scale(1.04, 1.18) translateY(0px); }
+  0%   { transform: scale(1.06) translateY(0px); }
+  50%  { transform: scale(1.06) translateY(-3.5px); }
+  100% { transform: scale(1.06) translateY(0px); }
 }
 
-/* snapping과 동시 적용 시 충돌 방지 */
 #toolbar.tb-orb-zoom.tb-snapping {
   transition: left .2s cubic-bezier(.22, .68, .36, 1),
               top .2s cubic-bezier(.22, .68, .36, 1),
               box-shadow .25s ease,
               transform .35s cubic-bezier(.25, .85, .35, 1.1),
-              border-color .25s ease,
-              padding .3s ease;
+              border-color .25s ease;
 }
 
-/* zoom 해제 시 animation이 즉시 멈추도록 */
 #toolbar:not(.tb-orb-zoom) {
   animation: none;
 }
+
 
 /* ══════════════════════════════════════════════════════
    선택 예정(미리보기) 표시 — 리디자인
