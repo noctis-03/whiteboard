@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  keyboard.js — 키보드 단축키
+//
+//  ADD: D키 → 편집(edit) 도구
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -23,6 +25,7 @@ export function initKeyboard() {
 
     const keyMap = {
       'v': () => setTool('select'),
+      'd': () => setTool('edit'),
       'h': () => setTool('pan'),
       'p': () => setTool('pen'),
       'l': () => setTool('highlight'),
