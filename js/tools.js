@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  tools.js — 도구, 색상, 선 굵기 전환
+//
+//  ADD: 편집(edit) 도구 추가
 // ═══════════════════════════════════════════════════
 
 import { tool, setToolState, setColorState, setSwState } from './state.js';
@@ -15,11 +17,18 @@ export function setTool(t) {
   const btn = document.getElementById('t-' + t);
   if (btn) btn.classList.add('active');
 
-  // select → select 전환 시에는 deselectAll 하지 않음
-  // 다른 도구에서 select로 올 때도 기존 선택을 유지
-  // 오직 select가 아닌 다른 도구로 전환할 때만 선택 해제
-  if (t !== 'select') {
+  // edit 도구로 전환 시에도 기존 선택 유지
+  // select, edit 사이 전환은 선택 해제하지 않음
+  if (t !== 'select' && t !== 'edit') {
     deselectAll();
+  }
+
+  // edit 모드 해제 시 활성 편집 상태 blur
+  if (prev === 'edit' && t !== 'edit') {
+    const active = document.activeElement;
+    if (active && (active.isContentEditable || active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
+      active.blur();
+    }
   }
 
   closeCtx();
