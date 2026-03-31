@@ -1,11 +1,14 @@
 // ═══════════════════════════════════════════════════
 //  drawing.js — 펜/형광펜/도형 그리기 & 지우개
+//
+//  UPDATE: 스트로크/도형 확정, 지우개 사용 후 pushState() 호출
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { s2b, b2s } from './transform.js';
 import { mkSvg, setAttrs, pts2path, smoothPts, buildTaperOutlinePath } from './svg.js';
 import { updateMinimap } from './layout.js';
+import { pushState } from './history.js';
 
 export function startDraw(bp) {
   S.setDrawing(true);
@@ -65,6 +68,7 @@ export function commitFreehandStroke() {
   S.pushStroke({ kind: spec.kind, attrs: spec.attrs, svgEl: finalEl });
   S.setLivePth(null);
   S.setDrawPts([]);
+  pushState();
 }
 
 // ── 도형 프리뷰 ──
@@ -123,9 +127,12 @@ export function finalizeShape(a, b) {
     S.pushStroke({ kind: 'arrow', svgEl: g, attrs: { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: S.color, 'stroke-width': S.sw, hl, d } });
   }
   updateMinimap();
+  pushState();
 }
 
 // ── 지우개 ──
+let eraseOccurred = false;
+
 export function eraseAt(bp) {
   const r = 18 / S.T.s;
   for (let i = S.strokes.length - 1; i >= 0; i--) {
@@ -134,7 +141,16 @@ export function eraseAt(bp) {
       if (bp.x >= bb.x - r && bp.x <= bb.x + bb.width + r && bp.y >= bb.y - r && bp.y <= bb.y + bb.height + r) {
         S.svgl.removeChild(S.strokes[i].svgEl);
         S.removeStroke(i);
+        eraseOccurred = true;
       }
     } catch (e) { /* ignore */ }
+  }
+}
+
+/** 지우개 동작이 끝났을 때 호출 — mouse.js / touch.js 에서 사용 */
+export function commitErase() {
+  if (eraseOccurred) {
+    pushState();
+    eraseOccurred = false;
   }
 }
