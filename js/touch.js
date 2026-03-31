@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  touch.js — 터치 이벤트 (1-finger, 핀치줌)
 //
-//  UPDATE: 드래그/리사이즈/지우개 완료 시 pushState() 호출
+//  UPDATE: orbLock 활성 시 모든 도구 동작 차단
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -13,6 +13,7 @@ import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
 import { focusEditableTouch } from './edit.js';
 import { pushState } from './history.js';
+import { orbLock } from './toolOrb.js';  // ← NEW
 
 function cancelSingleFingerActions() {
   if (S.drawing) {
@@ -29,8 +30,8 @@ function cancelSingleFingerActions() {
 }
 
 export function initTouchEvents() {
-  // 1-finger touchstart
   S.vp.addEventListener('touchstart', e => {
+    if (orbLock) { e.preventDefault(); return; }   // ★ 차단
     cancelLongPress();
     if (e.touches.length === 2) {
       cancelSingleFingerActions();
@@ -58,7 +59,6 @@ export function initTouchEvents() {
     if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); e.preventDefault(); return; }
     if (S.tool === 'text') { addText(bp); pushState(); e.preventDefault(); return; }
 
-    // ── 편집 도구 터치 ──
     if (S.tool === 'edit') {
       const elDiv = e.target.closest('.el');
       if (elDiv) {
@@ -81,15 +81,14 @@ export function initTouchEvents() {
     }
   }, { passive: false });
 
-  // Touchmove
   window.addEventListener('touchmove', e => {
-    // Pinch
+    if (orbLock) { e.preventDefault(); return; }   // ★ 차단
+
     if (e.touches.length === 2 && S.pinchActive) {
       e.preventDefault();
       const t0 = e.touches[0], t1 = e.touches[1];
       const newDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       const newMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
-
       if (S.pinchMid) { S.T.x += newMid.x - S.pinchMid.x; S.T.y += newMid.y - S.pinchMid.y; }
       if (S.pinchDist && S.pinchDist > 0) {
         const ratio = newDist / S.pinchDist;
@@ -108,7 +107,6 @@ export function initTouchEvents() {
     cancelLongPress();
     const t = e.touches[0];
 
-    // edit 도구에서는 터치 드래그 무시
     if (S.tool === 'edit') return;
 
     if (S.touchPanOrigin) {
@@ -136,8 +134,8 @@ export function initTouchEvents() {
     if ((S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') && S.shapeA) previewShape(S.shapeA, bp);
   }, { passive: false });
 
-  // Touchend
   window.addEventListener('touchend', e => {
+    if (orbLock) return;   // ★ 차단
     cancelLongPress();
     document.body.classList.remove('panning');
 
