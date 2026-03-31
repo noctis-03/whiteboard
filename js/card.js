@@ -1,5 +1,8 @@
 // ═══════════════════════════════════════════════════
 //  card.js — 카드 윈도우 & 서브블록
+//
+//  UPDATE: 서브블록 생성·드래그·리사이즈 시
+//          컨테이너 내부 그리드(20px)에 스냅
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -8,10 +11,31 @@ import { makeEl, addHandles, attachSelectClick } from './elements.js';
 import { onTap } from './utils.js';
 import { updateMinimap } from './layout.js';
 
+// ── 그리드 스냅 설정 ──
+const GRID = 20;                       // 스냅 단위 (px) — CSS background-size와 동일
+const MIN_W = 80;                      // 서브블록 최소 너비
+const MIN_H = 50;                      // 서브블록 최소 높이
+
+/** 값을 GRID 단위로 반올림 */
+function snap(v) {
+  return Math.round(v / GRID) * GRID;
+}
+
+/** 컨테이너 안에서 블록이 넘치지 않도록 클램핑 + 스냅 */
+function clampSnap(val, max) {
+  return snap(Math.max(0, Math.min(val, max)));
+}
+
 function createSubBlock(container, x = 10, y = 10) {
+  // ── 생성 좌표·크기도 그리드에 맞춤 ──
+  const initW = snap(160);             // 160 → 160 (이미 정렬됨)
+  const initH = snap(100);             // 100 → 100
+  const sx = snap(x);
+  const sy = snap(y);
+
   const block = document.createElement('div');
   block.className = 'card-sub-block';
-  block.style.cssText = `left:${x}px;top:${y}px;width:160px;height:100px;`;
+  block.style.cssText = `left:${sx}px;top:${sy}px;width:${initW}px;height:${initH}px;`;
 
   const header = document.createElement('div');
   header.className = 'card-sub-header';
@@ -55,12 +79,26 @@ function createSubBlock(container, x = 10, y = 10) {
   resizeHandle.className = 'card-sub-resize-handle';
 
   // Sub-block resize
-  resizeHandle.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); initSubResize(block, e.clientX, e.clientY); });
-  resizeHandle.addEventListener('touchstart', e => { if (e.touches.length !== 1) return; e.stopPropagation(); e.preventDefault(); initSubResize(block, e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  resizeHandle.addEventListener('mousedown', e => {
+    e.stopPropagation(); e.preventDefault();
+    initSubResize(block, container, e.clientX, e.clientY);
+  });
+  resizeHandle.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    e.stopPropagation(); e.preventDefault();
+    initSubResize(block, container, e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
 
   // Sub-block drag
-  dragHandle.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); initSubDrag(block, container, e.clientX, e.clientY); });
-  dragHandle.addEventListener('touchstart', e => { if (e.touches.length !== 1) return; e.stopPropagation(); e.preventDefault(); initSubDrag(block, container, e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  dragHandle.addEventListener('mousedown', e => {
+    e.stopPropagation(); e.preventDefault();
+    initSubDrag(block, container, e.clientX, e.clientY);
+  });
+  dragHandle.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    e.stopPropagation(); e.preventDefault();
+    initSubDrag(block, container, e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
 
   block.appendChild(header);
   block.appendChild(content);
@@ -68,21 +106,43 @@ function createSubBlock(container, x = 10, y = 10) {
   container.appendChild(block);
 }
 
-function initSubResize(block, startX, startY) {
+// ═══════════════════════════════════════════════════
+//  서브블록 리사이즈 — 드래그 중 자유 이동, 놓을 때 스냅
+// ═══════════════════════════════════════════════════
+function initSubResize(block, container, startX, startY) {
   const w0 = block.offsetWidth, h0 = block.offsetHeight;
   block.classList.add('card-sub-resizing');
 
   function onMove(cx, cy) {
-    block.style.width = Math.max(80, w0 + (cx - startX)) + 'px';
-    block.style.height = Math.max(50, h0 + (cy - startY)) + 'px';
+    const rawW = Math.max(MIN_W, w0 + (cx - startX));
+    const rawH = Math.max(MIN_H, h0 + (cy - startY));
+    block.style.width  = rawW + 'px';
+    block.style.height = rawH + 'px';
   }
+
   function onEnd() {
+    // ── 놓을 때 그리드에 스냅 ──
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const bx = block.offsetLeft;
+
+    let finalW = snap(Math.max(MIN_W, block.offsetWidth));
+    let finalH = snap(Math.max(MIN_H, block.offsetHeight));
+
+    // 컨테이너를 벗어나지 않도록 제한
+    if (bx + finalW > cw) finalW = snap(Math.max(MIN_W, cw - bx));
+    if (block.offsetTop + finalH > ch) finalH = snap(Math.max(MIN_H, ch - block.offsetTop));
+
+    block.style.width  = finalW + 'px';
+    block.style.height = finalH + 'px';
+
     block.classList.remove('card-sub-resizing');
     window.removeEventListener('mousemove', mm);
     window.removeEventListener('mouseup', mu);
     window.removeEventListener('touchmove', tm);
     window.removeEventListener('touchend', te);
   }
+
   const mm = e => onMove(e.clientX, e.clientY);
   const mu = () => onEnd();
   const tm = e => { if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY); };
@@ -93,21 +153,42 @@ function initSubResize(block, startX, startY) {
   window.addEventListener('touchend', te);
 }
 
+// ═══════════════════════════════════════════════════
+//  서브블록 드래그 — 드래그 중 자유 이동, 놓을 때 스냅
+// ═══════════════════════════════════════════════════
 function initSubDrag(block, container, startX, startY) {
   const ox = block.offsetLeft, oy = block.offsetTop;
   block.classList.add('card-sub-dragging');
 
   function onMove(cx, cy) {
     block.style.left = (ox + (cx - startX)) + 'px';
-    block.style.top = (oy + (cy - startY)) + 'px';
+    block.style.top  = (oy + (cy - startY)) + 'px';
   }
+
   function onEnd() {
+    // ── 놓을 때 그리드에 스냅 + 컨테이너 범위 제한 ──
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const bw = block.offsetWidth;
+    const bh = block.offsetHeight;
+
+    let finalX = snap(block.offsetLeft);
+    let finalY = snap(block.offsetTop);
+
+    // 음수 방지 & 컨테이너 밖으로 나가지 않게
+    finalX = clampSnap(finalX, Math.max(0, cw - bw));
+    finalY = clampSnap(finalY, Math.max(0, ch - bh));
+
+    block.style.left = finalX + 'px';
+    block.style.top  = finalY + 'px';
+
     block.classList.remove('card-sub-dragging');
     window.removeEventListener('mousemove', mm);
     window.removeEventListener('mouseup', mu);
     window.removeEventListener('touchmove', tm);
     window.removeEventListener('touchend', te);
   }
+
   const mm = e => onMove(e.clientX, e.clientY);
   const mu = () => onEnd();
   const tm = e => { if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY); };
