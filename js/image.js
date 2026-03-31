@@ -1,11 +1,14 @@
 // ═══════════════════════════════════════════════════
 //  image.js — 이미지 삽입 처리
+//
+//  UPDATE: 이미지 추가 후 pushState()
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { s2b } from './transform.js';
 import { makeEl, addHandles, attachSelectClick } from './elements.js';
 import { updateMinimap } from './layout.js';
+import { pushState } from './history.js';
 
 export function handleImg(e) {
   const file = e.target.files[0];
@@ -33,6 +36,7 @@ export function handleImg(e) {
       attachSelectClick(el);
       S.board.appendChild(el);
       updateMinimap();
+      pushState();
     };
     img.src = ev.target.result;
   };
