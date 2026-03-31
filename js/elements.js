@@ -1,5 +1,9 @@
 // ═══════════════════════════════════════════════════
 //  elements.js — DOM 요소 생성, 핸들, 이벤트 바인딩
+//
+//  FIX: Shift/Ctrl 클릭으로 다중 선택이 안 되던 문제 수정
+//  원인: attachSelectClick에서 additive 모드에서
+//        deselectAll()이 불필요하게 호출됨
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -59,15 +63,25 @@ export function attachSelectClick(el) {
   el.addEventListener('mousedown', e => {
     if (S.tool !== 'select') return;
     e.stopPropagation();
-    const add = e.shiftKey || e.metaKey || e.ctrlKey;
-    if (!add && !S.selectedEls.includes(el)) deselectAll();
-    select(el, add || S.selectedEls.includes(el));
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+
+    if (additive) {
+      // Shift/Ctrl: 기존 선택 유지하면서 추가/토글
+      select(el, true);
+    } else {
+      // 일반 클릭: 이미 선택된 요소가 아니면 전체 해제 후 단일 선택
+      if (!S.selectedEls.includes(el)) {
+        deselectAll();
+      }
+      select(el, false);
+    }
+
     el.style.zIndex = S.nextZ();
     const bp = s2b(e.clientX, e.clientY);
     if (S.selectedEls.length > 1) {
       S.setDragging({ els: S.selectedEls.map(e2 => ({ el: e2, ox: bp.x - parseFloat(e2.style.left), oy: bp.y - parseFloat(e2.style.top) })) });
-    } else {
-      S.setDragging({ el, ox: bp.x - parseFloat(el.style.left), oy: bp.y - parseFloat(el.style.top) });
+    } else if (S.selectedEls.length === 1) {
+      S.setDragging({ el: S.selectedEls[0], ox: bp.x - parseFloat(S.selectedEls[0].style.left), oy: bp.y - parseFloat(S.selectedEls[0].style.top) });
     }
     e.preventDefault();
   });
@@ -100,6 +114,8 @@ export function duplicateEl(el) {
   clone.style.top = (parseFloat(el.style.top) + 20) + 'px';
   clone.style.zIndex = S.nextZ();
   clone.classList.remove('selected');
+  const oldHandles = clone.querySelector('.el-handles');
+  if (oldHandles) oldHandles.remove();
   S.board.appendChild(clone);
   addHandles(clone);
   attachSelectClick(clone);
