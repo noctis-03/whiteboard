@@ -1,13 +1,14 @@
 // ═══════════════════════════════════════════════════
 //  persistence.js — 저장, 불러오기, 자동 저장
 //
-//  FIX: 저장 시 최근 파일 목록에 자동 추가
+//  UPDATE: 불러오기/전체 지우기 후 clearHistory()
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { snack } from './utils.js';
 import { updateMinimap } from './layout.js';
 import { addRecentFile } from './startup.js';
+import { clearHistory } from './history.js';
 
 function buildSaveData() {
   const data = {
@@ -43,7 +44,6 @@ export function saveBoard() {
   URL.revokeObjectURL(a.href);
   snack('저장 완료');
 
-  // 최근 파일 목록에 추가
   addRecentFile(filename, data);
 
   try { localStorage.setItem('canvas-autosave', JSON.stringify(data)); } catch (e) { /* ignore */ }
@@ -58,8 +58,8 @@ export function loadBoard(e) {
       const data = JSON.parse(ev.target.result);
       restoreBoard(data);
       snack('불러오기 완료');
-      // 최근 파일 목록에 추가
       addRecentFile(file.name, data);
+      clearHistory();
     } catch (err) {
       snack('파일 오류');
     }
@@ -84,7 +84,6 @@ export function restoreBoard(data) {
       if (s.kind === 'rect') { el = mkSvg('rect'); }
       else if (s.kind === 'ellipse') { el = mkSvg('ellipse'); }
       else if (s.kind === 'arrow') {
-        // 화살표 복원: g 그룹 안에 line + path
         el = mkSvg('g');
         if (s.attrs.x1 !== undefined) {
           const line = mkSvg('line');
@@ -141,6 +140,7 @@ export function clearAll() {
   try { localStorage.removeItem('canvas-autosave'); } catch (e) { /* ignore */ }
   updateMinimap();
   snack('전체 삭제 완료');
+  clearHistory();
 }
 
 export function autoSave() {
