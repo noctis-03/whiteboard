@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  main.js — 애플리케이션 진입점
 //
-//  ∞ Canvas 0.01 — Modular Architecture
+//  UPDATE: history 모듈 초기화 추가
 // ═══════════════════════════════════════════════════
 
 import { resetView, toggleGrid } from './transform.js';
@@ -19,6 +19,7 @@ import { addCardWindow } from './card.js';
 import { createStartupWindow } from './startup.js';
 import { mkSvg, setAttrs } from './svg.js';
 import { initToolbar } from './toolbar.js';
+import { initHistory } from './history.js';
 
 persistence._svg = { mkSvg, setAttrs };
 
@@ -61,18 +62,22 @@ function init() {
     if (fn) btn.addEventListener('click', fn);
   });
 
-  // 색상 선택 — #color-bar 내의 .cdot 대상
+  // 색상 선택
   document.querySelectorAll('#color-bar .cdot').forEach(el => {
     el.addEventListener('click', () => setColor(el));
   });
 
-  // 선 굵기 선택 — #color-bar 내의 .sbtn 대상
+  // 선 굵기 선택
   document.querySelectorAll('#color-bar .sbtn').forEach(el => {
     el.addEventListener('click', () => setStroke(el, parseInt(el.dataset.sw)));
   });
 
   autoSave();
   createStartupWindow();
+
+  // ── 히스토리 초기화 (초기 상태 기록) ──
+  // 스타트업 윈도우가 생성된 뒤 약간의 딜레이로 초기 스냅샷 저장
+  setTimeout(() => initHistory(), 100);
 
   console.log('∞ Canvas 0.01 — Modular loaded');
 }
