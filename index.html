@@ -125,11 +125,20 @@
     <div class="sep"></div>
     <button class="tbtn" data-tip="이미지" data-action="addImage">🖼️</button>
     <button class="tbtn" data-tip="그리드 (G)"  data-action="toggleGrid">⊞</button>
+
+    <!-- ═══ NEW: Undo / Redo 버튼 ═══ -->
+    <div class="sep"></div>
+    <button class="tbtn undo-redo-btn" id="t-undo" data-tip="실행 취소 (Ctrl+Z)" data-action="undo">↩</button>
+    <button class="tbtn undo-redo-btn" id="t-redo" data-tip="다시 실행 (Ctrl+Shift+Z)" data-action="redo">↪</button>
+    <!-- ═══ END NEW ═══ -->
+
+    <div class="sep"></div>
     <button class="tbtn" data-tip="저장 Ctrl+S" data-action="save">💾</button>
     <button class="tbtn" data-tip="불러오기"     data-action="load">📂</button>
     <button class="tbtn" data-tip="전체 지우기"  data-action="clearAll">🗑️</button>
   </div>
 </div>
+
 
 <!-- ══ COLOR BAR (그리기 도구 선택 시 나타남) ══ -->
 <div id="color-bar">
