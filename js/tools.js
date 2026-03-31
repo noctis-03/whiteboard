@@ -1,56 +1,134 @@
 // ═══════════════════════════════════════════════════
-//  tools.js — 도구, 색상, 선 굵기 전환
+//  mouse.js — 마우스 이벤트 핸들링
 //
-//  ADD: 편집(edit) 도구 추가
+//  ADD: 편집(edit) 도구 — 클릭 시 텍스트 편집 진입
+//  FIX: 올가미(lasso) 선택 후 선택 유지 강화
 // ═══════════════════════════════════════════════════
 
-import { tool, setToolState, setColorState, setSwState } from './state.js';
-import { deselectAll } from './selection.js';
+import * as S from './state.js';
+import { applyT, getVpRect, s2b } from './transform.js';
 import { closeCtx } from './contextMenu.js';
-import { closePenPanel, togglePenPanel } from './penPanel.js';
+import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, clearLassoHover, doResize } from './selection.js';
+import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt } from './drawing.js';
+import { addText } from './text.js';
+import { updateMinimap } from './layout.js';
+import { focusEditable } from './edit.js';
 
-export function setTool(t) {
-  const prev = tool;
-  setToolState(t);
-  document.body.setAttribute('data-tool', t);
-  document.querySelectorAll('.tbtn[id^="t-"]').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('t-' + t);
-  if (btn) btn.classList.add('active');
+let justFinishedLasso = false;
 
-  // edit 도구로 전환 시에도 기존 선택 유지
-  // select, edit 사이 전환은 선택 해제하지 않음
-  if (t !== 'select' && t !== 'edit') {
-    deselectAll();
-  }
+export function initMouseEvents() {
+  // Wheel zoom
+  S.vp.addEventListener('wheel', e => {
+    e.preventDefault(); closeCtx();
+    const f = e.deltaY < 0 ? 1.09 : 0.92;
+    const ns = Math.min(8, Math.max(0.08, S.T.s * f));
+    const r = getVpRect();
+    const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    S.T.x = lx - (lx - S.T.x) * (ns / S.T.s);
+    S.T.y = ly - (ly - S.T.y) * (ns / S.T.s);
+    S.T.s = ns; applyT();
+  }, { passive: false });
 
-  // edit 모드 해제 시 활성 편집 상태 blur
-  if (prev === 'edit' && t !== 'edit') {
-    const active = document.activeElement;
-    if (active && (active.isContentEditable || active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
-      active.blur();
+  // Mouse down
+  S.vp.addEventListener('mousedown', e => {
+    if (e.button === 2) return;
+    closeCtx();
+
+    if (e.button === 1 || S.tool === 'pan') {
+      S.setPanning(true);
+      const r = getVpRect();
+      S.setPanOrigin({ x: e.clientX - r.left - S.T.x, y: e.clientY - r.top - S.T.y });
+      document.body.classList.add('panning');
+      e.preventDefault(); return;
     }
-  }
 
-  closeCtx();
-  closePenPanel();
-}
+    const bp = s2b(e.clientX, e.clientY);
 
-export function setToolOrPanel(t) {
-  if (tool === t) {
-    togglePenPanel(t);
-  } else {
-    setTool(t);
-  }
-}
+    if (S.tool === 'pen' || S.tool === 'highlight') { startDraw(bp); return; }
+    if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(bp); return; }
+    if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); return; }
+    if (S.tool === 'text') { addText(bp); return; }
 
-export function setColor(el) {
-  document.querySelectorAll('.cdot').forEach(d => d.classList.remove('active'));
-  el.classList.add('active');
-  setColorState(el.dataset.c);
-}
+    // ── 편집 도구: 클릭한 요소 내 편집 가능 영역에 포커스 ──
+    if (S.tool === 'edit') {
+      const elDiv = e.target.closest('.el');
+      if (elDiv) {
+        focusEditable(elDiv, e);
+        // e.preventDefault 하지 않음 — 브라우저가 텍스트 커서를 놓을 수 있게
+      }
+      // 빈 공간 클릭 시 blur
+      if (!elDiv) {
+        const active = document.activeElement;
+        if (active && active !== document.body) active.blur();
+      }
+      return;
+    }
 
-export function setStroke(el, v) {
-  document.querySelectorAll('.sbtn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  setSwState(v);
+    if (S.tool === 'select') {
+      if (!e.target.closest('.el')) {
+        clearLassoHover();
+        deselectAll();
+        S.setLasso({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
+        showSelRect(S.lasso);
+        e.preventDefault();
+      }
+    }
+  });
+
+  // Mouse move
+  window.addEventListener('mousemove', e => {
+    justFinishedLasso = false;
+
+    if (S.panning) {
+      const r = getVpRect();
+      S.T.x = e.clientX - r.left - S.panOrigin.x;
+      S.T.y = e.clientY - r.top - S.panOrigin.y;
+      applyT(); return;
+    }
+    if (S.dragging) {
+      const bp = s2b(e.clientX, e.clientY);
+      if (S.dragging.els) {
+        S.dragging.els.forEach(d => { d.el.style.left = (bp.x - d.ox) + 'px'; d.el.style.top = (bp.y - d.oy) + 'px'; });
+      } else {
+        S.dragging.el.style.left = (bp.x - S.dragging.ox) + 'px';
+        S.dragging.el.style.top = (bp.y - S.dragging.oy) + 'px';
+      }
+      updateMinimap(); return;
+    }
+    if (S.resizing) { doResize(e.clientX, e.clientY); return; }
+    if (S.lasso) {
+      S.lasso.x1 = e.clientX; S.lasso.y1 = e.clientY;
+      showSelRect(S.lasso); highlightLasso(S.lasso); return;
+    }
+    if (!S.drawing) return;
+    const bp = s2b(e.clientX, e.clientY);
+    if (S.tool === 'pen' || S.tool === 'highlight') continueDraw(bp);
+    if (S.tool === 'eraser') eraseAt(bp);
+    if ((S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') && S.shapeA) previewShape(S.shapeA, bp);
+  });
+
+  // Mouse up
+  window.addEventListener('mouseup', e => {
+    document.body.classList.remove('panning');
+    if (S.panning) { S.setPanning(false); return; }
+    if (S.dragging) { S.setDragging(null); updateMinimap(); return; }
+    if (S.resizing) { S.setResizing(null); updateMinimap(); return; }
+    if (S.lasso) {
+      finalizeLasso(S.lasso);
+      clearLassoHover();
+      S.setLasso(null);
+      hideSelRect();
+      justFinishedLasso = true;
+      return;
+    }
+    if (!S.drawing) return;
+    S.setDrawing(false);
+    S.pCtx.clearRect(0, 0, S.pCvs.width, S.pCvs.height);
+    if (S.tool === 'pen' || S.tool === 'highlight') commitFreehandStroke();
+    if ((S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') && S.shapeA) {
+      const bp = s2b(e.clientX, e.clientY);
+      if (Math.abs(bp.x - S.shapeA.x) > 4 || Math.abs(bp.y - S.shapeA.y) > 4) finalizeShape(S.shapeA, bp);
+      S.setShapeA(null);
+    }
+  });
 }
