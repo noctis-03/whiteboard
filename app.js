@@ -854,13 +854,15 @@ function cycleStickyBg(el){
 
 /* ════════════════════════════════════════════════════════
    CARD WINDOW (User-created editable window)
+   Sub-blocks are now absolutely positioned on a grid
+   and can be freely dragged to any position.
 ════════════════════════════════════════════════════════ */
 const CARD_GRID = 20;
 
 function snapToGrid(val){ return Math.round(val / CARD_GRID) * CARD_GRID; }
 
-/* ── Sub-block drag-reorder state ── */
-let subDrag = null;   // {block, container, placeholder, ghostEl, offsetX, offsetY, startIdx}
+/* ── Sub-block drag state ── */
+let subDrag = null;
 
 function addCardWindow(opts={}){
   const r=getVpRect();
@@ -900,7 +902,7 @@ function addCardWindow(opts={}){
   content.addEventListener('mousedown',e=>e.stopPropagation());
   content.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
 
-  /* Sub-block container */
+  /* Sub-block container — relative positioned, sub-blocks are absolute inside */
   const subContainer=document.createElement('div');
   subContainer.className='card-sub-container';
   subContainer.addEventListener('mousedown',e=>e.stopPropagation());
@@ -930,29 +932,86 @@ function addCardWindow(opts={}){
     opts.blocks.forEach(b=>addSubBlock(subContainer, b));
   }
 
+  /* Auto-size the container height based on blocks */
+  updateContainerHeight(subContainer);
+
   if(!opts.x) setTimeout(()=>titleEl.focus(),50);
   updateMinimap();
   return el;
+}
+
+/* Recalculate the minimum height of the sub-container so all blocks are visible */
+function updateContainerHeight(container){
+  let maxBottom = 0;
+  container.querySelectorAll('.card-sub-block').forEach(b=>{
+    const bTop = parseFloat(b.style.top) || 0;
+    const bH   = parseFloat(b.style.height) || b.offsetHeight || 80;
+    if(bTop + bH > maxBottom) maxBottom = bTop + bH;
+  });
+  container.style.minHeight = Math.max(60, maxBottom + 10) + 'px';
+}
+
+/* Find a free position for a new sub-block that doesn't overlap existing ones */
+function findFreePosition(container, blockW, blockH){
+  const existing = [];
+  container.querySelectorAll('.card-sub-block').forEach(b=>{
+    existing.push({
+      x: parseFloat(b.style.left) || 0,
+      y: parseFloat(b.style.top)  || 0,
+      w: parseFloat(b.style.width)  || b.offsetWidth  || 120,
+      h: parseFloat(b.style.height) || b.offsetHeight || 80
+    });
+  });
+
+  /* Try stacking vertically, starting from top-left */
+  let tryY = 0;
+  for(let attempts=0; attempts<100; attempts++){
+    let tryX = 0;
+    let overlaps = false;
+    for(const e of existing){
+      /* Check overlap */
+      if(tryX < e.x + e.w && tryX + blockW > e.x &&
+         tryY < e.y + e.h && tryY + blockH > e.y){
+        overlaps = true;
+        /* Move below this existing block */
+        tryY = snapToGrid(e.y + e.h + CARD_GRID);
+        break;
+      }
+    }
+    if(!overlaps) return { x: snapToGrid(tryX), y: snapToGrid(tryY) };
+  }
+  return { x: 0, y: snapToGrid(tryY) };
 }
 
 function addSubBlock(container, opts={}){
   const block=document.createElement('div');
   block.className='card-sub-block';
 
-  const initW = opts.w ?? 280;
+  const initW = opts.w ?? 260;
   const initH = opts.h ?? 80;
-  block.style.width  = snapToGrid(initW)+'px';
-  block.style.height = snapToGrid(initH)+'px';
+  const snappedW = snapToGrid(initW);
+  const snappedH = snapToGrid(initH);
+
+  block.style.width  = snappedW + 'px';
+  block.style.height = snappedH + 'px';
+
+  /* Position: use saved position or find a free spot */
+  const pos = (opts.bx != null && opts.by != null)
+    ? { x: snapToGrid(opts.bx), y: snapToGrid(opts.by) }
+    : findFreePosition(container, snappedW, snappedH);
+
+  block.style.left = pos.x + 'px';
+  block.style.top  = pos.y + 'px';
 
   /* Sub-block header */
   const bHeader=document.createElement('div');
   bHeader.className='card-sub-header';
 
-  /* Drag handle for reorder */
+  /* Drag handle for free positioning */
   const dragHandle=document.createElement('div');
   dragHandle.className='card-sub-drag-handle';
   dragHandle.textContent='⠿';
-  dragHandle.title='드래그하여 순서 변경';
+  dragHandle.title='드래그하여 위치 이동';
 
   const bTitle=document.createElement('div');
   bTitle.className='card-sub-title';
@@ -981,7 +1040,11 @@ function addSubBlock(container, opts={}){
   const delBtn=document.createElement('button');
   delBtn.className='card-sub-btn card-sub-btn-del';
   delBtn.textContent='✕';
-  delBtn.addEventListener('click',e=>{ e.stopPropagation(); block.remove(); });
+  delBtn.addEventListener('click',e=>{
+    e.stopPropagation();
+    block.remove();
+    updateContainerHeight(container);
+  });
 
   bActions.appendChild(dirBtn);
   bActions.appendChild(delBtn);
@@ -1022,6 +1085,7 @@ function addSubBlock(container, opts={}){
     const dx=e.clientX-subResizing.startX, dy=e.clientY-subResizing.startY;
     block.style.width  = snapToGrid(Math.max(CARD_GRID*3, subResizing.startW + dx/T.s))+'px';
     block.style.height = snapToGrid(Math.max(CARD_GRID*2, subResizing.startH + dy/T.s))+'px';
+    updateContainerHeight(container);
   }
   function onSubResizeTouchMove(e){
     if(!subResizing || e.touches.length!==1) return;
@@ -1030,6 +1094,7 @@ function addSubBlock(container, opts={}){
     const dx=t.clientX-subResizing.startX, dy=t.clientY-subResizing.startY;
     block.style.width  = snapToGrid(Math.max(CARD_GRID*3, subResizing.startW + dx/T.s))+'px';
     block.style.height = snapToGrid(Math.max(CARD_GRID*2, subResizing.startH + dy/T.s))+'px';
+    updateContainerHeight(container);
   }
   function onSubResizeEnd(){
     subResizing=null;
@@ -1038,6 +1103,7 @@ function addSubBlock(container, opts={}){
     document.removeEventListener('mouseup', onSubResizeEnd);
     document.removeEventListener('touchmove', onSubResizeTouchMove);
     document.removeEventListener('touchend', onSubResizeEnd);
+    updateContainerHeight(container);
   }
   resizeH.addEventListener('mousedown',e=>{
     e.stopPropagation(); e.preventDefault();
@@ -1049,36 +1115,40 @@ function addSubBlock(container, opts={}){
     onSubResizeStart(e.touches[0].clientX, e.touches[0].clientY);
   },{passive:false});
 
-  /* ── Sub-block DRAG-REORDER logic ── */
+  /* ── Sub-block FREE-POSITION DRAG logic ── */
   function onDragStart(cx, cy){
-    const rect = block.getBoundingClientRect();
-    const siblings = [...container.querySelectorAll('.card-sub-block')];
-    const idx = siblings.indexOf(block);
+    const blockRect = block.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
 
-    /* Create placeholder */
+    /* Create placeholder at current position */
     const ph = document.createElement('div');
     ph.className = 'card-sub-placeholder';
+    ph.style.left   = block.style.left;
+    ph.style.top    = block.style.top;
     ph.style.width  = block.offsetWidth + 'px';
     ph.style.height = block.offsetHeight + 'px';
-    container.insertBefore(ph, block);
+    container.appendChild(ph);
 
-    /* Ghost: move the real block to fixed overlay */
+    /* Move block to dragging state */
     block.classList.add('card-sub-dragging');
     block.style.position = 'fixed';
-    block.style.width  = rect.width + 'px';
-    block.style.height = rect.height + 'px';
-    block.style.left   = rect.left + 'px';
-    block.style.top    = rect.top + 'px';
+    block.style.left   = blockRect.left + 'px';
+    block.style.top    = blockRect.top + 'px';
+    block.style.width  = blockRect.width + 'px';
+    block.style.height = blockRect.height + 'px';
     block.style.zIndex = '99999';
     document.body.appendChild(block);
 
     subDrag = {
       block, container, placeholder: ph,
-      offsetX: cx - rect.left,
-      offsetY: cy - rect.top,
-      startIdx: idx,
-      w: rect.width,
-      h: rect.height
+      offsetX: cx - blockRect.left,
+      offsetY: cy - blockRect.top,
+      containerRect: containerRect,
+      blockW: blockRect.width,
+      blockH: blockRect.height,
+      /* Store the original block dimensions in container-local px */
+      origW: blockRect.width / T.s,
+      origH: blockRect.height / T.s
     };
 
     document.addEventListener('mousemove', onDragMove);
@@ -1099,56 +1169,50 @@ function addSubBlock(container, opts={}){
 
   function moveDraggedBlock(cx, cy){
     const d = subDrag;
+
+    /* Move the floating block with the cursor */
     d.block.style.left = (cx - d.offsetX) + 'px';
     d.block.style.top  = (cy - d.offsetY) + 'px';
 
-    /* Determine insertion position among siblings */
-    const siblings = [...d.container.querySelectorAll('.card-sub-block, .card-sub-placeholder')];
-    let insertBefore = null;
-    for(const sib of siblings){
-      if(sib === d.placeholder) continue;
-      if(sib.classList.contains('card-sub-dragging')) continue;
-      const sr = sib.getBoundingClientRect();
-      const midY = sr.top + sr.height / 2;
-      if(cy < midY){
-        insertBefore = sib;
-        break;
-      }
-    }
-    if(insertBefore){
-      d.container.insertBefore(d.placeholder, insertBefore);
-    } else {
-      /* append before the add-block button — placeholder goes to end */
-      const lastBlock = [...d.container.children].filter(
-        c => c.classList.contains('card-sub-block') || c.classList.contains('card-sub-placeholder')
-      ).pop();
-      if(lastBlock && lastBlock !== d.placeholder){
-        d.container.insertBefore(d.placeholder, lastBlock.nextSibling);
-      } else if(!d.container.contains(d.placeholder)){
-        d.container.appendChild(d.placeholder);
-      }
-    }
+    /* Calculate position relative to container (accounting for board transform) */
+    const freshContainerRect = d.container.getBoundingClientRect();
+    const localX = (cx - d.offsetX - freshContainerRect.left) / T.s;
+    const localY = (cy - d.offsetY - freshContainerRect.top) / T.s;
+
+    /* Snap to grid */
+    const snappedX = snapToGrid(Math.max(0, localX));
+    const snappedY = snapToGrid(Math.max(0, localY));
+
+    /* Update placeholder position */
+    d.placeholder.style.left   = snappedX + 'px';
+    d.placeholder.style.top    = snappedY + 'px';
+    d.placeholder.style.width  = snapToGrid(d.origW) + 'px';
+    d.placeholder.style.height = snapToGrid(d.origH) + 'px';
   }
 
   function finishDrag(){
     if(!subDrag) return;
     const d = subDrag;
-    /* Move the real block back into the container at the placeholder position */
-    d.block.classList.remove('card-sub-dragging');
-    d.block.style.position = '';
-    d.block.style.left = '';
-    d.block.style.top = '';
-    d.block.style.zIndex = '';
-    d.block.style.width  = '';
-    d.block.style.height = '';
-    /* Re-apply stored dimensions */
-    const storedW = d.w / T.s;
-    const storedH = d.h / T.s;
-    d.block.style.width  = snapToGrid(storedW) + 'px';
-    d.block.style.height = snapToGrid(storedH) + 'px';
 
-    d.container.insertBefore(d.block, d.placeholder);
+    /* Get the snapped position from the placeholder */
+    const finalX = parseFloat(d.placeholder.style.left) || 0;
+    const finalY = parseFloat(d.placeholder.style.top)  || 0;
+    const finalW = snapToGrid(d.origW);
+    const finalH = snapToGrid(d.origH);
+
+    /* Restore block to normal positioning inside container */
+    d.block.classList.remove('card-sub-dragging');
+    d.block.style.position = 'absolute';
+    d.block.style.left   = finalX + 'px';
+    d.block.style.top    = finalY + 'px';
+    d.block.style.width  = finalW + 'px';
+    d.block.style.height = finalH + 'px';
+    d.block.style.zIndex = '';
+
+    d.container.appendChild(d.block);
     d.placeholder.remove();
+
+    updateContainerHeight(d.container);
     subDrag = null;
   }
 
@@ -1178,6 +1242,7 @@ function addSubBlock(container, opts={}){
   },{passive:false});
 
   container.appendChild(block);
+  updateContainerHeight(container);
   return block;
 }
 
@@ -1458,6 +1523,8 @@ function duplicateCard(el,x,y,w,h){
       title:b.querySelector('.card-sub-title')?.textContent??'',
       text:b.querySelector('.card-sub-content')?.textContent??'',
       w:b.offsetWidth, h:b.offsetHeight,
+      bx:parseFloat(b.style.left)||0,
+      by:parseFloat(b.style.top)||0,
       dir:b.dataset.dir||'vertical'
     });
   });
@@ -1535,7 +1602,7 @@ function getStrokeAttrs(s){
   return a;
 }
 function getBoardData(){
-  const data={version:3,transform:T,strokes:strokes.map(s=>({kind:s.kind,attrs:getStrokeAttrs(s)})),elements:[]};
+  const data={version:4,transform:T,strokes:strokes.map(s=>({kind:s.kind,attrs:getStrokeAttrs(s)})),elements:[]};
   board.querySelectorAll('.el').forEach(el=>{
     const kind=el.dataset.kind;
     const rec={kind,x:parseFloat(el.style.left),y:parseFloat(el.style.top),w:parseFloat(el.style.width),h:parseFloat(el.style.height),z:parseInt(el.style.zIndex)||10};
@@ -1551,6 +1618,8 @@ function getBoardData(){
           title:b.querySelector('.card-sub-title')?.textContent??'',
           text:b.querySelector('.card-sub-content')?.textContent??'',
           w:b.offsetWidth, h:b.offsetHeight,
+          bx:parseFloat(b.style.left)||0,
+          by:parseFloat(b.style.top)||0,
           dir:b.dataset.dir||'vertical'
         });
       });
