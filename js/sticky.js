@@ -1,10 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  sticky.js — 포스트잇 생성
 //
-//  FIX: 색상 변경이 1회만 작동하던 버그 수정
-//  원인: body.style.background는 브라우저가 rgb() 형태로 반환하여
-//        STICKY_COLORS의 hex 값과 indexOf 비교 시 항상 -1 반환
-//  해결: 별도 인덱스 변수로 현재 색상 추적
+//  UPDATE: 추가/삭제 후 pushState()
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -12,6 +9,7 @@ import { s2b } from './transform.js';
 import { makeEl, addHandles, attachSelectClick } from './elements.js';
 import { onTap } from './utils.js';
 import { updateMinimap } from './layout.js';
+import { pushState } from './history.js';
 
 const STICKY_COLORS = ['#fef3c7', '#fce7f3', '#d1fae5', '#dbeafe', '#ede9fe', '#fee2e2', '#fef9c3'];
 
@@ -19,7 +17,6 @@ export function addSticky() {
   const vr = S.vp.getBoundingClientRect();
   const bp = s2b(vr.left + vr.width / 2, vr.top + vr.height / 2);
 
-  // 랜덤 초기 색상 인덱스
   let colorIdx = Math.floor(Math.random() * STICKY_COLORS.length);
   const bg = STICKY_COLORS[colorIdx];
 
@@ -36,7 +33,6 @@ export function addSticky() {
   colorBtn.className = 'sticky-btn';
   colorBtn.textContent = '🎨';
   onTap(colorBtn, () => {
-    // 인덱스 기반으로 다음 색상 순환
     colorIdx = (colorIdx + 1) % STICKY_COLORS.length;
     body.style.background = STICKY_COLORS[colorIdx];
   });
@@ -44,7 +40,7 @@ export function addSticky() {
   const closeBtn = document.createElement('button');
   closeBtn.className = 'sticky-btn';
   closeBtn.textContent = '✕';
-  onTap(closeBtn, () => { el.remove(); updateMinimap(); });
+  onTap(closeBtn, () => { el.remove(); updateMinimap(); pushState(); });
 
   bar.appendChild(colorBtn);
   bar.appendChild(closeBtn);
@@ -60,4 +56,5 @@ export function addSticky() {
   attachSelectClick(el);
   S.board.appendChild(el);
   updateMinimap();
+  pushState();
 }
