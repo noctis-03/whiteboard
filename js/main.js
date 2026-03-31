@@ -38,13 +38,13 @@ function init() {
   // 줌 리셋
   document.getElementById('zoom-pill').addEventListener('click', resetView);
 
-  // 도구 선택 버튼
-  document.querySelectorAll('[data-tool]').forEach(btn => {
+  // 도구 선택 버튼 — #toolbar 내부의 버튼만 대상으로 함 (body[data-tool] 충돌 방지)
+  document.querySelectorAll('#toolbar [data-tool]').forEach(btn => {
     btn.addEventListener('click', () => setTool(btn.dataset.tool));
   });
 
   // 도구 또는 패널 토글 버튼
-  document.querySelectorAll('[data-tool-or-panel]').forEach(btn => {
+  document.querySelectorAll('#toolbar [data-tool-or-panel]').forEach(btn => {
     btn.addEventListener('click', () => setToolOrPanel(btn.dataset.toolOrPanel));
   });
 
