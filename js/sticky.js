@@ -1,5 +1,10 @@
 // ═══════════════════════════════════════════════════
 //  sticky.js — 포스트잇 생성
+//
+//  FIX: 색상 변경이 1회만 작동하던 버그 수정
+//  원인: body.style.background는 브라우저가 rgb() 형태로 반환하여
+//        STICKY_COLORS의 hex 값과 indexOf 비교 시 항상 -1 반환
+//  해결: 별도 인덱스 변수로 현재 색상 추적
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -13,7 +18,11 @@ const STICKY_COLORS = ['#fef3c7', '#fce7f3', '#d1fae5', '#dbeafe', '#ede9fe', '#
 export function addSticky() {
   const vr = S.vp.getBoundingClientRect();
   const bp = s2b(vr.left + vr.width / 2, vr.top + vr.height / 2);
-  const bg = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+
+  // 랜덤 초기 색상 인덱스
+  let colorIdx = Math.floor(Math.random() * STICKY_COLORS.length);
+  const bg = STICKY_COLORS[colorIdx];
+
   const el = makeEl(bp.x - 100, bp.y - 70, 200, 140);
 
   const body = document.createElement('div');
@@ -27,8 +36,9 @@ export function addSticky() {
   colorBtn.className = 'sticky-btn';
   colorBtn.textContent = '🎨';
   onTap(colorBtn, () => {
-    const next = STICKY_COLORS[(STICKY_COLORS.indexOf(body.style.background) + 1) % STICKY_COLORS.length];
-    body.style.background = next;
+    // 인덱스 기반으로 다음 색상 순환
+    colorIdx = (colorIdx + 1) % STICKY_COLORS.length;
+    body.style.background = STICKY_COLORS[colorIdx];
   });
 
   const closeBtn = document.createElement('button');
