@@ -637,6 +637,11 @@ body[data-tool="circle"] #viewport,
 body[data-tool="arrow"] #viewport{cursor:crosshair;}
 body[data-tool="text"] #viewport{cursor:text;}
 body[data-tool="select"] #viewport{cursor:default;}
+body[data-tool="edit"] #viewport{cursor:text;}
+body[data-tool="edit"] #viewport .el{cursor:text;}
+body[data-tool="edit"] #viewport .el .h-move{cursor:text;pointer-events:none;}
+body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
+
 
 /* ── Pen Panel ── */
 #pen-panel{
