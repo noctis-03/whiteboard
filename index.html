@@ -104,15 +104,14 @@
   </div>
 </div>
 
-<!-- ══ TOOLBAR ══ -->
+<!-- ══ TOOLBAR (가로 통일) ══ -->
 <div id="toolbar">
-  <div id="toolbar-fixed">
+  <div id="tb-drag-handle">⠿</div>
+  <div id="tb-tools">
     <button class="tbtn active" id="t-select" data-tip="선택 (V)" data-tool="select">⊹</button>
     <button class="tbtn" id="t-edit" data-tip="편집 (D)" data-tool="edit">✎</button>
     <button class="tbtn" id="t-pan" data-tip="이동 (H)" data-tool="pan">✋</button>
     <div class="sep"></div>
-  </div>
-  <div id="toolbar-scroll">
     <button class="tbtn" id="t-pen"       data-tip="펜 (P) · 재클릭 → 설정"       data-tool-or-panel="pen">✏️</button>
     <button class="tbtn" id="t-highlight" data-tip="형광펜 (L) · 재클릭 → 설정"    data-tool-or-panel="highlight">🖊️</button>
     <button class="tbtn" id="t-eraser"    data-tip="지우개 (E) · 재클릭 → 설정"    data-tool-or-panel="eraser">◻</button>
@@ -125,23 +124,25 @@
     <button class="tbtn" id="t-arrow"  data-tip="화살표 (A)"    data-tool="arrow">→</button>
     <div class="sep"></div>
     <button class="tbtn" data-tip="이미지" data-action="addImage">🖼️</button>
-    <div class="sep"></div>
-    <div class="cdot active" style="background:#1a1714" data-c="#1a1714"></div>
-    <div class="cdot" style="background:#c84b2f" data-c="#c84b2f"></div>
-    <div class="cdot" style="background:#2b6cb0" data-c="#2b6cb0"></div>
-    <div class="cdot" style="background:#2d8a4e" data-c="#2d8a4e"></div>
-    <div class="cdot" style="background:#7c3d9e" data-c="#7c3d9e"></div>
-    <div class="cdot" style="background:#e8a320" data-c="#e8a320"></div>
-    <div class="sep"></div>
-    <button class="sbtn active" data-sw="2"><div class="sline" style="height:2px"></div></button>
-    <button class="sbtn"        data-sw="5"><div class="sline" style="height:4px"></div></button>
-    <button class="sbtn"        data-sw="10"><div class="sline" style="height:7px"></div></button>
-    <div class="sep"></div>
     <button class="tbtn" data-tip="그리드 (G)"  data-action="toggleGrid">⊞</button>
     <button class="tbtn" data-tip="저장 Ctrl+S" data-action="save">💾</button>
     <button class="tbtn" data-tip="불러오기"     data-action="load">📂</button>
     <button class="tbtn" data-tip="전체 지우기"  data-action="clearAll">🗑️</button>
   </div>
+</div>
+
+<!-- ══ COLOR BAR (그리기 도구 선택 시 나타남) ══ -->
+<div id="color-bar">
+  <div class="cdot active" style="background:#1a1714" data-c="#1a1714"></div>
+  <div class="cdot" style="background:#c84b2f" data-c="#c84b2f"></div>
+  <div class="cdot" style="background:#2b6cb0" data-c="#2b6cb0"></div>
+  <div class="cdot" style="background:#2d8a4e" data-c="#2d8a4e"></div>
+  <div class="cdot" style="background:#7c3d9e" data-c="#7c3d9e"></div>
+  <div class="cdot" style="background:#e8a320" data-c="#e8a320"></div>
+  <div class="cb-sep"></div>
+  <button class="sbtn active" data-sw="2"><div class="sline" style="height:2px"></div></button>
+  <button class="sbtn"        data-sw="5"><div class="sline" style="height:4px"></div></button>
+  <button class="sbtn"        data-sw="10"><div class="sline" style="height:7px"></div></button>
 </div>
 
 <input type="file" id="img-in"  accept="image/*" style="display:none">
