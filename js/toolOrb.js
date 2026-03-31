@@ -1,283 +1,301 @@
 // ═══════════════════════════════════════════════════
-//  toolOrb.js — 포인터 근처에 따라다니는 원(Orb)
+//  toolOrb.js — 포인터 근처를 떠다니는 도구 전환 오브
 //
-//  · 입력 위치의 오른쪽 위에 부드럽게 따라다님
-//  · Orb 위에서 더블클릭+홀드 → 좌우 드래그로 도구 전환
-//  · 드래그 중에는 캔버스 도구 동작 완전 차단
-//  · 손을 때면 해당 도구 확정
-//
-//  UPDATE: 드래그 모드 진입 시 toolbar 확대 애니메이션
-//          선택 예정 표시 디자인 개선
+//  v3: 필기 회피 메커니즘 + 더블클릭 도망 버그 수정
 // ═══════════════════════════════════════════════════
+import { tool }       from './state.js';
+import { setTool }    from './tools.js';
 
-import { tool } from './state.js';
-import { setTool } from './tools.js';
+/* ── constants ── */
+const ORB_SIZE      = 36;
+const ORBIT_RADIUS  = 52;   // 가상 원 반경 (입력점 중심)
+const LERP          = 0.13;
+const DRAG_THRESH   = 28;
+const DBLCLICK_MS   = 320;
+const DBLCLICK_RAD  = 20;
+const HIDE_DELAY    = 4000;
 
-/* ── 설정 ── */
-const ORB_SIZE     = 36;
-const OFFSET_X     = 30;
-const OFFSET_Y     = -28;
-const LERP         = 0.15;
-const DRAG_THRESH  = 28;
-const DBLCLICK_MS  = 320;
-const HIDE_DELAY   = 4000;
+/* ── state ── */
+export let orbLock   = false;
 
-/* ── 전역 차단 플래그 ── */
-export let orbLock = false;
-
-/* ── 도구 순서 ── */
-function getToolOrder() {
-  const btns = document.querySelectorAll(
-    '#tb-tools .tbtn[data-tool], #tb-tools .tbtn[data-tool-or-panel]'
-  );
-  const order = [];
-  btns.forEach(btn => {
-    const t = btn.dataset.tool || btn.dataset.toolOrPanel;
-    if (t && !order.includes(t)) order.push(t);
-  });
-  return order;
-}
-
-/* ── DOM ── */
 let orb, orbLabel;
+let orbX = -200, orbY = -200;      // 현재 렌더 위치
+let targetX = -200, targetY = -200; // 목표 위치
+let anchorX = 0, anchorY = 0;      // 입력점 (가상 원 중심)
+let orbAngle = -Math.PI / 4;       // 현재 오브 각도 (기본: 오른쪽 위)
+let targetAngle = -Math.PI / 4;
 
-/* ── 위치 상태 ── */
-let targetX = -200, targetY = -200;
-let currentX = -200, currentY = -200;
-let visible = false;
-let hideTimer = null;
+// 필기 방향 추적
+let lastPointerX = 0, lastPointerY = 0;
+let velX = 0, velY = 0;            // 이동 벡터 (smoothed)
 
-/* ── Orb 위 더블클릭 감지 ── */
-let orbLastDownTime = 0;
+let hideTimer   = 0;
+let orbVisible  = false;
+let orbActive   = false;           // 드래그 모드
+let lastClickT  = 0, lastClickX = 0, lastClickY = 0;
+let dragStartX  = 0;
+let orbSteps    = 0;
+let orbToolOrder = [];
+let orbBaseIdx   = 0;
+let previewIdx   = -1;
 
-/* ── 드래그 모드 ── */
-let orbActive     = false;
-let orbDragStartX = 0;
-let orbSteps      = 0;
-let orbBaseIdx    = 0;
-let orbPreviewTool = '';
-
-/* ═══════════════════════════════════════════════════
-   초기화
-═══════════════════════════════════════════════════ */
-export function initToolOrb() {
+/* ── init ── */
+export function initToolOrb () {
   orb = document.createElement('div');
   orb.id = 'tool-orb';
-  orb.setAttribute('aria-hidden', 'true');
-
   orbLabel = document.createElement('span');
   orbLabel.id = 'tool-orb-label';
   orb.appendChild(orbLabel);
-
   document.body.appendChild(orb);
 
-  orb.addEventListener('pointerdown', onOrbPointerDown);
+  /* 오브 위 더블클릭 감지 */
+  orb.addEventListener('pointerdown', onOrbPointerDown, { passive: false });
 
+  /* 전역 포인터 추적 */
   window.addEventListener('pointerdown', onGlobalDown, true);
   window.addEventListener('pointermove', onGlobalMove, true);
   window.addEventListener('pointerup',   onGlobalUp,   true);
-  window.addEventListener('pointercancel', onGlobalUp,  true);
+  window.addEventListener('pointercancel', onGlobalUp, true);
 
   animLoop();
-  updateLabel(tool);
+  updateLabel(tool());
 }
 
-/* ═══════════════════════════════════════════════════
-   Orb 위 포인터 다운
-═══════════════════════════════════════════════════ */
-function onOrbPointerDown(e) {
-  e.stopPropagation();
+/* ═══ 오브 위 pointerdown — 더블클릭 감지 ═══ */
+function onOrbPointerDown (e) {
+  e.stopPropagation();   // 캔버스 이벤트 차단
   e.preventDefault();
 
-  const now = Date.now();
-  if (now - orbLastDownTime < DBLCLICK_MS) {
+  const now = performance.now();
+  const dx  = e.clientX - lastClickX;
+  const dy  = e.clientY - lastClickY;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  if (now - lastClickT < DBLCLICK_MS && dist < DBLCLICK_RAD) {
+    // 더블클릭 → 드래그 모드 진입
     activateOrbDrag(e);
-    orbLastDownTime = 0;
-  } else {
-    orbLastDownTime = now;
   }
+  lastClickT = now;
+  lastClickX = e.clientX;
+  lastClickY = e.clientY;
 }
 
-/* ═══════════════════════════════════════════════════
-   전역 포인터 이벤트
-═══════════════════════════════════════════════════ */
-function onGlobalDown(e) {
-  if (orbActive) {
-    if (!orb.contains(e.target)) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    return;
-  }
+/* ═══ 전역 pointerdown ═══ */
+function onGlobalDown (e) {
+  if (orbActive) return;
 
-  if (e.target.closest('#toolbar') ||
-      e.target.closest('#pen-panel') ||
-      e.target.closest('#color-bar') ||
-      orb.contains(e.target)) return;
+  // 오브 자체 클릭이면 target 갱신 금지 (도망 방지)
+  if (orb.contains(e.target)) return;
 
-  targetX = e.clientX + OFFSET_X;
-  targetY = e.clientY + OFFSET_Y;
+  // 툴바, 패널 등 UI 위면 무시
+  const skip = e.target.closest('#toolbar, #pen-panel, #color-bar, #ctx-menu, .sys-window, #topbar');
+  if (skip) return;
+
+  // 앵커(입력점) 갱신
+  anchorX = e.clientX;
+  anchorY = e.clientY;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+  velX = 0;
+  velY = 0;
+
+  // 오브 각도를 현재 값 유지 (자연스러운 전환)
+  computeTargetFromAngle();
+
   showOrb();
-}
-
-function onGlobalMove(e) {
-  if (orbActive) {
-    e.stopPropagation();
-    e.preventDefault();
-    handleOrbDrag(e);
-    targetX = e.clientX + OFFSET_X;
-    targetY = e.clientY + OFFSET_Y;
-    return;
-  }
-
-  if (e.target.closest('#toolbar') ||
-      e.target.closest('#pen-panel') ||
-      e.target.closest('#color-bar')) return;
-
-  if (e.buttons > 0 || e.pointerType === 'touch') {
-    targetX = e.clientX + OFFSET_X;
-    targetY = e.clientY + OFFSET_Y;
-    showOrb();
-  }
-}
-
-function onGlobalUp(e) {
-  if (orbActive) {
-    e.stopPropagation();
-    e.preventDefault();
-    finishOrbDrag();
-    return;
-  }
   scheduleHide(HIDE_DELAY);
 }
 
-/* ═══════════════════════════════════════════════════
-   드래그 모드
-═══════════════════════════════════════════════════ */
-function activateOrbDrag(e) {
+/* ═══ 전역 pointermove ═══ */
+function onGlobalMove (e) {
+  if (orbActive) {
+    handleOrbDrag(e);
+    return;
+  }
+
+  // 오브 위 hover면 무시
+  if (orb.contains(e.target)) return;
+
+  const skip = e.target.closest('#toolbar, #pen-panel, #color-bar, #ctx-menu, .sys-window, #topbar');
+  if (skip) return;
+
+  // 이동 벡터 업데이트 (smoothed)
+  const dx = e.clientX - lastPointerX;
+  const dy = e.clientY - lastPointerY;
+  velX = velX * 0.6 + dx * 0.4;
+  velY = velY * 0.6 + dy * 0.4;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+
+  // 앵커 업데이트
+  anchorX = e.clientX;
+  anchorY = e.clientY;
+
+  // 필기 방향 반대쪽으로 오브 회피
+  computeAvoidanceAngle();
+  computeTargetFromAngle();
+
+  if (orbVisible) scheduleHide(HIDE_DELAY);
+}
+
+/* ═══ 전역 pointerup ═══ */
+function onGlobalUp (e) {
+  if (orbActive) {
+    finishOrbDrag(e);
+    return;
+  }
+}
+
+/* ═══ 필기 회피 각도 계산 ═══ */
+function computeAvoidanceAngle () {
+  const speed = Math.sqrt(velX * velX + velY * velY);
+  if (speed < 1.5) return; // 거의 정지 → 현재 각도 유지
+
+  // 이동 방향의 반대편 + 약간 위쪽 선호
+  let moveAngle = Math.atan2(velY, velX);
+  let avoidAngle = moveAngle + Math.PI; // 반대
+
+  // 위쪽 선호 보정 (weight towards upper-right)
+  const preferAngle = -Math.PI / 4; // 오른쪽 위
+  const blendFactor = Math.min(speed / 8, 1); // 빠를수록 회피 우선
+  targetAngle = lerpAngle(preferAngle, avoidAngle, blendFactor * 0.7);
+}
+
+function computeTargetFromAngle () {
+  targetX = anchorX + Math.cos(orbAngle) * ORBIT_RADIUS - ORB_SIZE / 2;
+  targetY = anchorY + Math.sin(orbAngle) * ORBIT_RADIUS - ORB_SIZE / 2;
+}
+
+function lerpAngle (a, b, t) {
+  // 각도 보간 (최단 경로)
+  let diff = b - a;
+  while (diff > Math.PI)  diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return a + diff * t;
+}
+
+/* ═══ 드래그 모드 ═══ */
+function activateOrbDrag (e) {
   orbActive = true;
   orbLock   = true;
-  orbDragStartX = e.clientX;
-  orbSteps = 0;
+  dragStartX = e.clientX;
+  orbSteps   = 0;
 
-  const order = getToolOrder();
-  orbBaseIdx = order.indexOf(tool);
-  if (orbBaseIdx === -1) orbBaseIdx = 0;
-  orbPreviewTool = tool;
+  orbToolOrder = getToolOrder();
+  const cur    = tool();
+  orbBaseIdx   = orbToolOrder.indexOf(cur);
+  if (orbBaseIdx < 0) orbBaseIdx = 0;
+  previewIdx   = orbBaseIdx;
 
   orb.classList.add('orb-active');
-  updateLabel(tool);
-
-  // ★ 도구창 확대 애니메이션 — 클래스 추가
   const tb = document.getElementById('toolbar');
   if (tb) tb.classList.add('tb-orb-zoom');
 
-  // 현재 활성 버튼에 미리보기 표시
-  previewToolHighlight(tool);
-
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  previewToolHighlight(orbToolOrder[previewIdx]);
+  updateLabel(orbToolOrder[previewIdx]);
 }
 
-function handleOrbDrag(e) {
-  const totalDx = e.clientX - orbDragStartX;
-  const newSteps = Math.trunc(totalDx / DRAG_THRESH);
-
-  if (newSteps !== orbSteps) {
-    orbSteps = newSteps;
-    const order = getToolOrder();
-    let idx = Math.max(0, Math.min(orbBaseIdx + newSteps, order.length - 1));
-    const newTool = order[idx];
-
-    if (newTool !== orbPreviewTool) {
-      orbPreviewTool = newTool;
-      previewToolHighlight(newTool);
-      updateLabel(newTool);
-      if (navigator.vibrate) navigator.vibrate(8);
-    }
-  }
-}
-
-function finishOrbDrag() {
+function handleOrbDrag (e) {
   if (!orbActive) return;
+  const dx = e.clientX - dragStartX;
+  const raw = Math.round(dx / DRAG_THRESH);
+  if (raw === orbSteps) return;
+  orbSteps = raw;
+
+  let idx = orbBaseIdx + orbSteps;
+  idx = Math.max(0, Math.min(idx, orbToolOrder.length - 1));
+  if (idx === previewIdx) return;
+  previewIdx = idx;
+
+  previewToolHighlight(orbToolOrder[previewIdx]);
+  updateLabel(orbToolOrder[previewIdx]);
+
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+
+function finishOrbDrag () {
+  if (!orbActive) return;
+  const chosen = orbToolOrder[previewIdx] || tool();
   orbActive = false;
   orbLock   = false;
-  orb.classList.remove('orb-active');
 
-  // ★ 도구창 확대 해제
+  orb.classList.remove('orb-active');
   const tb = document.getElementById('toolbar');
   if (tb) tb.classList.remove('tb-orb-zoom');
 
-  if (orbPreviewTool && orbPreviewTool !== tool) {
-    setTool(orbPreviewTool);
-  }
-
   clearPreviewHighlight();
-  updateLabel(orbPreviewTool || tool);
+  setTool(chosen);
+  updateLabel(chosen);
   scheduleHide(HIDE_DELAY);
 }
 
-/* ── 미리보기 하이라이트 ── */
-function previewToolHighlight(t) {
+/* ═══ helpers ═══ */
+function getToolOrder () {
+  const btns = document.querySelectorAll('#toolbar .tbtn[data-tool]');
+  return Array.from(btns).map(b => b.dataset.tool);
+}
+
+function previewToolHighlight (tid) {
   clearPreviewHighlight();
-  const btn = document.querySelector(
-    `#tb-tools .tbtn[data-tool="${t}"], #tb-tools .tbtn[data-tool-or-panel="${t}"]`
-  );
+  const btn = document.querySelector(`#toolbar .tbtn[data-tool="${tid}"]`);
   if (btn) {
     btn.classList.add('orb-preview');
-    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    btn.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
   }
 }
 
-function clearPreviewHighlight() {
-  document.querySelectorAll('.orb-preview').forEach(b => b.classList.remove('orb-preview'));
+function clearPreviewHighlight () {
+  document.querySelectorAll('.tbtn.orb-preview').forEach(b => b.classList.remove('orb-preview'));
 }
 
-/* ═══════════════════════════════════════════════════
-   표시 / 숨김 / 레이블
-═══════════════════════════════════════════════════ */
-function showOrb() {
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  if (!visible) {
-    visible = true;
-    orb.classList.add('orb-visible');
-    currentX = targetX;
-    currentY = targetY;
+/* ── visibility ── */
+function showOrb () {
+  if (!orbVisible) {
+    orbVisible = true;
+    // 초기 위치를 즉시 점프
+    orbX = targetX;
+    orbY = targetY;
     applyPosition();
+    orb.classList.add('orb-visible');
   }
 }
 
-function scheduleHide(ms) {
-  if (hideTimer) clearTimeout(hideTimer);
+function scheduleHide (ms) {
+  clearTimeout(hideTimer);
   hideTimer = setTimeout(() => {
     if (orbActive) return;
-    visible = false;
+    orbVisible = false;
     orb.classList.remove('orb-visible');
-    hideTimer = null;
   }, ms);
 }
 
-function updateLabel(t) {
+/* ── label ── */
+function updateLabel (t) {
   const map = {
-    select: '⊹', edit: '✎', pan: '✋',
-    pen: '✏️', highlight: '🖊️', eraser: '◻',
-    text: 'T', rect: '□', circle: '○', arrow: '→',
+    select:'↖', edit:'✎', pan:'✋', pen:'🖊',
+    highlight:'🖍', eraser:'⌫', sticky:'📒', card:'🗂',
+    text:'T', rect:'▭', circle:'◯', arrow:'→', image:'🖼'
   };
-  orbLabel.textContent = map[t] || t.charAt(0).toUpperCase();
+  if (orbLabel) orbLabel.textContent = map[t] || '•';
 }
 
-/* ═══════════════════════════════════════════════════
-   애니메이션 루프
-═══════════════════════════════════════════════════ */
-function animLoop() {
-  currentX += (targetX - currentX) * LERP;
-  currentY += (targetY - currentY) * LERP;
+/* ═══ animation loop ═══ */
+function animLoop () {
+  // 부드러운 각도 보간
+  orbAngle = lerpAngle(orbAngle, targetAngle, 0.08);
+  computeTargetFromAngle();
+
+  // 위치 보간
+  orbX += (targetX - orbX) * LERP;
+  orbY += (targetY - orbY) * LERP;
   applyPosition();
   requestAnimationFrame(animLoop);
 }
 
-function applyPosition() {
-  const half = ORB_SIZE / 2;
-  const x = Math.max(half, Math.min(currentX, window.innerWidth - half));
-  const y = Math.max(half, Math.min(currentY, window.innerHeight - half));
-  orb.style.transform = `translate(${x - half}px, ${y - half}px)`;
+function applyPosition () {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const x  = Math.max(0, Math.min(orbX, vw - ORB_SIZE));
+  const y  = Math.max(0, Math.min(orbY, vh - ORB_SIZE));
+  orb.style.transform = `translate(${x}px, ${y}px)`;
 }
