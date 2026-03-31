@@ -1,11 +1,8 @@
 // ═══════════════════════════════════════════════════
 //  mouse.js — 마우스 이벤트 핸들링
 //
-//  FIX: 올가미(lasso) 선택 후 마우스를 놓으면 선택이
-//       유지되지 않는 문제 수정
-//  - mouseup에서 finalizeLasso 후 clearLassoHover 명시 호출
-//  - 올가미 종료 후 선택 요소가 있으면 deselectAll 방지
-//  - mousedown에서 올가미 시작 전 기존 lasso 잔여 상태 정리
+//  ADD: 편집(edit) 도구 — 클릭 시 텍스트 편집 진입
+//  FIX: 올가미(lasso) 선택 후 선택 유지 강화
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -15,9 +12,8 @@ import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, c
 import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt } from './drawing.js';
 import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
+import { focusEditable } from './edit.js';
 
-// 올가미 직후 상태 추적 — mousedown에서 올가미 직후의
-// 빈 공간 클릭을 구분하기 위한 플래그
 let justFinishedLasso = false;
 
 export function initMouseEvents() {
@@ -52,12 +48,25 @@ export function initMouseEvents() {
     if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(bp); return; }
     if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); return; }
     if (S.tool === 'text') { addText(bp); return; }
+
+    // ── 편집 도구: 클릭한 요소 내 편집 가능 영역에 포커스 ──
+    if (S.tool === 'edit') {
+      const elDiv = e.target.closest('.el');
+      if (elDiv) {
+        focusEditable(elDiv, e);
+        // e.preventDefault 하지 않음 — 브라우저가 텍스트 커서를 놓을 수 있게
+      }
+      // 빈 공간 클릭 시 blur
+      if (!elDiv) {
+        const active = document.activeElement;
+        if (active && active !== document.body) active.blur();
+      }
+      return;
+    }
+
     if (S.tool === 'select') {
       if (!e.target.closest('.el')) {
-        // 잔여 lasso-hover 정리
         clearLassoHover();
-
-        // 빈 공간 클릭 → 기존 선택 해제 후 올가미 시작
         deselectAll();
         S.setLasso({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
         showSelRect(S.lasso);
@@ -68,7 +77,6 @@ export function initMouseEvents() {
 
   // Mouse move
   window.addEventListener('mousemove', e => {
-    // 올가미 직후 플래그가 남아있으면 해제
     justFinishedLasso = false;
 
     if (S.panning) {
