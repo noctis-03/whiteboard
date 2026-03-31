@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  penPanel.js — 펜/형광펜/지우개 설정 패널
+//
+//  FIX: 가로 툴바에 맞게 패널 위치 계산 수정
 // ═══════════════════════════════════════════════════
 
 import { penCfg, penPanelOpen, setPenPanelOpen, tool, color, sw } from './state.js';
@@ -44,13 +46,37 @@ export function closePenPanel() {
 }
 
 function positionPenPanel(t) {
-  if (window.innerWidth <= 767) return;
-  const btn = document.getElementById('t-' + t);
-  if (!btn) return;
-  const br = btn.getBoundingClientRect();
   const pp = document.getElementById('pen-panel');
-  pp.style.left = (br.right + 10) + 'px';
-  pp.style.top = Math.min(br.top, window.innerHeight - 500) + 'px';
+  const tb = document.getElementById('toolbar');
+  if (!tb) return;
+
+  const tr = tb.getBoundingClientRect();
+  const ppW = 228;
+  const ppH = 420; // 대략 높이
+
+  // 툴바 버튼 찾기
+  const btn = document.getElementById('t-' + t);
+  const br = btn ? btn.getBoundingClientRect() : tr;
+
+  // 화면 반분 기준: 위에 있으면 아래로, 아래에 있으면 위로
+  const tbMidY = tr.top + tr.height / 2;
+  const above = tbMidY < window.innerHeight / 2;
+
+  let x = br.left + br.width / 2 - ppW / 2;
+  let y;
+
+  if (above) {
+    y = tr.bottom + 12;
+  } else {
+    y = tr.top - ppH - 12;
+  }
+
+  // 화면 밖 보정
+  x = Math.max(8, Math.min(x, window.innerWidth - ppW - 8));
+  y = Math.max(8, Math.min(y, window.innerHeight - ppH - 8));
+
+  pp.style.left = x + 'px';
+  pp.style.top = y + 'px';
 }
 
 export function onPPChange() {
