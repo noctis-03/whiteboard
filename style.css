@@ -480,27 +480,48 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
 }
 
 /* ══════════════════════════════════════════════════════
-   Toolbar — Orb 드래그 모드 진입 시 확대 애니메이션
+   Toolbar — Orb 드래그 모드 진입 시 확대 + 둥실 애니메이션
 ══════════════════════════════════════════════════════ */
 #toolbar {
-  transition: box-shadow .15s, transform .22s cubic-bezier(.34,1.56,.64,1), border-color .2s;
+  transition: box-shadow .25s ease,
+              transform .35s cubic-bezier(.25, .85, .35, 1.1),
+              border-color .25s ease,
+              padding .3s ease;
   transform-origin: center center;
 }
 
 #toolbar.tb-orb-zoom {
-  transform: scale(1.06);
-  box-shadow: 0 12px 36px rgba(26, 23, 20, 0.20),
-              0 0 0 2px rgba(43, 108, 176, 0.15);
-  border-color: color-mix(in srgb, var(--accent2) 40%, var(--border) 60%);
+  /* 가로는 살짝, 세로를 눈에 띄게 키움 */
+  transform: scale(1.04, 1.18);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  box-shadow: 0 14px 42px rgba(26, 23, 20, 0.20),
+              0 0 0 2.5px rgba(43, 108, 176, 0.12);
+  border-color: color-mix(in srgb, var(--accent2) 35%, var(--border) 65%);
+  /* 둥실거리는 float 애니메이션 */
+  animation: tb-float 2.4s ease-in-out infinite;
 }
 
-/* snapping과 동시 적용 시 transform 충돌 방지 */
+/* 둥실둥실 떠다니는 느낌 */
+@keyframes tb-float {
+  0%   { transform: scale(1.04, 1.18) translateY(0px); }
+  50%  { transform: scale(1.04, 1.18) translateY(-3.5px); }
+  100% { transform: scale(1.04, 1.18) translateY(0px); }
+}
+
+/* snapping과 동시 적용 시 충돌 방지 */
 #toolbar.tb-orb-zoom.tb-snapping {
-  transition: left .2s cubic-bezier(.22,.68,.36,1),
-              top .2s cubic-bezier(.22,.68,.36,1),
-              box-shadow .15s,
-              transform .22s cubic-bezier(.34,1.56,.64,1),
-              border-color .2s;
+  transition: left .2s cubic-bezier(.22, .68, .36, 1),
+              top .2s cubic-bezier(.22, .68, .36, 1),
+              box-shadow .25s ease,
+              transform .35s cubic-bezier(.25, .85, .35, 1.1),
+              border-color .25s ease,
+              padding .3s ease;
+}
+
+/* zoom 해제 시 animation이 즉시 멈추도록 */
+#toolbar:not(.tb-orb-zoom) {
+  animation: none;
 }
 
 /* ══════════════════════════════════════════════════════
