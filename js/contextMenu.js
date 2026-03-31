@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════════════════
 //  contextMenu.js — 우클릭/롱프레스 컨텍스트 메뉴
+//
+//  UPDATE: 삭제/복제/z-order 변경 후 pushState()
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { duplicateEl } from './elements.js';
 import { updateMinimap } from './layout.js';
+import { pushState } from './history.js';
 
 export function showCtxMenu(el, cx, cy) {
   S.setCtxEl(el);
@@ -27,10 +30,11 @@ export function ctxDo(a) {
     const targets = S.selectedEls.length > 0 ? [...S.selectedEls] : [S.ctxEl];
     targets.forEach(e => e.remove());
     S.setSelectedEls([]); S.setSelected(null); updateMinimap();
+    pushState();
   }
-  if (a === 'dup') duplicateEl(S.ctxEl);
-  if (a === 'front') S.ctxEl.style.zIndex = S.nextZ();
-  if (a === 'back') S.ctxEl.style.zIndex = 1;
+  if (a === 'dup') { duplicateEl(S.ctxEl); pushState(); }
+  if (a === 'front') { S.ctxEl.style.zIndex = S.nextZ(); pushState(); }
+  if (a === 'back') { S.ctxEl.style.zIndex = 1; pushState(); }
 }
 
 export function startLongPress(target, cx, cy) {
