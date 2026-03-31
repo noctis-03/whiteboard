@@ -10,23 +10,18 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&display=swap');
 
-/* ══════════════════════════════════════════
-   ROOT TOKENS
-══════════════════════════════════════════ */
 :root {
   --bg:#f5f2eb; --grid:#d8d3c8; --ink:#1a1714;
   --panel:#faf8f4; --border:#c8c3b8; --shadow:rgba(26,23,20,0.14);
   --accent:#c84b2f; --accent2:#2b6cb0;
-  /* layout sizes – overridden by JS */
-  --tb-w: 60px;   /* sidebar width  (≥768px) */
-  --tb-h: 60px;   /* bottom bar h   (<768px) */
+  --tb-w: 60px;
+  --tb-h: 60px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top,    0px);
   --safe-l: env(safe-area-inset-left,   0px);
   --safe-r: env(safe-area-inset-right,  0px);
 }
 
-/* ── Reset ── */
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;}
 body{
@@ -37,9 +32,6 @@ body{
   -webkit-tap-highlight-color:transparent;
 }
 
-/* ══════════════════════════════════════════
-   CANVAS LAYERS
-══════════════════════════════════════════ */
 #grid{
   position:fixed;inset:0;pointer-events:none;z-index:0;
   background-image:radial-gradient(circle,var(--grid) 1.5px,transparent 1.5px);
@@ -50,7 +42,6 @@ body{
 #svg-layer{position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;}
 #preview-canvas{position:fixed;pointer-events:none;z-index:500;}
 
-/* Selection lasso */
 #sel-rect{
   position:fixed;border:1.5px solid var(--accent2);
   background:rgba(43,108,176,0.08);pointer-events:none;
@@ -58,9 +49,6 @@ body{
 }
 .el.lasso-hover>.el-body{outline:2px dashed var(--accent2);outline-offset:2px;}
 
-/* ══════════════════════════════════════════
-   ELEMENTS (sticky / text / image)
-══════════════════════════════════════════ */
 .el{position:absolute;}
 .el-body{width:100%;height:100%;border-radius:2px;}
 .el-handles{display:none;position:absolute;inset:-1px;pointer-events:none;}
@@ -81,7 +69,6 @@ body{
 .h-resize.e{top:calc(50% - 6px);right:-6px;cursor:e-resize;}
 .h-resize.w{top:calc(50% - 6px);left:-6px;cursor:w-resize;}
 
-/* Touch: bigger hit targets */
 @media(pointer:coarse){
   .h-resize{width:20px;height:20px;}
   .h-resize.nw{top:-10px;left:-10px;}
@@ -94,7 +81,6 @@ body{
   .h-resize.w{top:calc(50% - 10px);left:-10px;}
 }
 
-/* Sticky */
 .sticky-body{
   padding:10px;display:flex;flex-direction:column;
   box-shadow:3px 5px 14px var(--shadow);min-width:120px;min-height:90px;
@@ -112,14 +98,12 @@ body{
   color:var(--ink);outline:none;cursor:text;min-height:60px;
 }
 
-/* Text */
 .text-body{
   padding:4px 6px;min-width:60px;min-height:30px;white-space:pre-wrap;
   word-break:break-word;font-family:'Fraunces',serif;font-weight:300;
   line-height:1.4;outline:none;cursor:text;background:transparent;
 }
 
-/* Startup windows */
 .start-window{position:absolute;}
 .start-window-body{
   width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;
@@ -176,12 +160,8 @@ body{
 }
 .shortcut-desc{font-size:12px;color:var(--ink);text-align:right;line-height:1.4;}
 
-/* Image */
 .image-body{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:1px;}
 
-/* ══════════════════════════════════════════
-   SHARED BUTTON / DOT / STROKE STYLES
-══════════════════════════════════════════ */
 .tbtn{
   display:flex;align-items:center;justify-content:center;
   border:none;border-radius:8px;background:transparent;
@@ -193,7 +173,6 @@ body{
 .tbtn:active{transform:scale(.93);}
 .tbtn.active{background:var(--ink);color:var(--panel);}
 
-/* tooltip — desktop only */
 @media(hover:hover){
   .tbtn[data-tip]:hover{background:rgba(0,0,0,0.07);transform:translateY(-1px);}
   .tbtn[data-tip]:hover::after{
@@ -222,9 +201,6 @@ body{
 
 .sep{background:var(--border);flex-shrink:0;}
 
-/* ══════════════════════════════════════════
-   ★ FLOATING TOOLBAR (all platforms)
-══════════════════════════════════════════ */
 #toolbar{
   position:fixed;
   left:calc(14px + var(--safe-l));
@@ -256,7 +232,6 @@ body{
 #toolbar .sep{width:60%;height:1px;margin:4px 0;}
 #toolbar-fixed .sep{margin-top:6px;}
 
-/* tablet tuning */
 @media(max-width:1024px){
   #toolbar{
     left:calc(12px + var(--safe-l));
@@ -268,7 +243,6 @@ body{
   #toolbar .tbtn{width:42px;height:42px;font-size:17px;}
 }
 
-/* phone: floating bottom rail */
 @media(max-width:767px){
   #toolbar{
     left:calc(10px + var(--safe-l));
@@ -308,9 +282,6 @@ body{
   #toolbar .tbtn[data-tip]:hover::after{display:none;}
 }
 
-/* ══════════════════════════════════════════
-   TOPBAR
-══════════════════════════════════════════ */
 #topbar{
   position:fixed;z-index:1000;
   display:flex;align-items:center;gap:6px;
@@ -318,7 +289,6 @@ body{
 }
 #topbar>*{pointer-events:all;}
 
-/* desktop/tablet: top-center */
 #topbar{
   top:calc(14px + var(--safe-t));
   left:0;
@@ -333,7 +303,6 @@ body{
 #zoom-pill{cursor:pointer;min-width:54px;text-align:center;}
 #zoom-pill:hover{background:rgba(0,0,0,0.06);}
 
-/* mobile: top-right corner */
 @media(max-width:767px){
   #topbar{
     top:calc(10px + var(--safe-t));
@@ -345,9 +314,6 @@ body{
   .pill{padding:4px 10px;font-size:10px;}
 }
 
-/* ══════════════════════════════════════════
-   CONTEXT MENU
-══════════════════════════════════════════ */
 #ctx{
   position:fixed;z-index:9999;background:var(--panel);
   border:1.5px solid var(--border);border-radius:10px;
@@ -361,9 +327,6 @@ body{
 .citem.danger{color:var(--accent);}
 .cdiv{height:1px;background:var(--border);margin:4px 0;}
 
-/* ══════════════════════════════════════════
-   SNACKBAR
-══════════════════════════════════════════ */
 #snack{
   position:fixed;left:50%;
   transform:translateX(-50%) translateY(-8px);
@@ -374,15 +337,11 @@ body{
 }
 #snack.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-/* desktop: below topbar */
 #snack{top:58px;}
 @media(max-width:767px){
   #snack{top:calc(50px + var(--safe-t));}
 }
 
-/* ══════════════════════════════════════════
-   MINIMAP
-══════════════════════════════════════════ */
 #minimap{
   position:fixed;right:16px;
   width:130px;height:84px;
@@ -390,14 +349,10 @@ body{
   overflow:hidden;box-shadow:0 2px 10px var(--shadow);z-index:999;
   bottom:16px;
 }
-/* hide on small screens */
 @media(max-width:767px){
   #minimap{display:none;}
 }
 
-/* ══════════════════════════════════════════
-   CURSOR OVERRIDES
-══════════════════════════════════════════ */
 body[data-tool="pan"] #viewport{cursor:grab;}
 body[data-tool="pan"].panning #viewport{cursor:grabbing;}
 body[data-tool="pen"] #viewport,
@@ -409,9 +364,6 @@ body[data-tool="arrow"] #viewport{cursor:crosshair;}
 body[data-tool="text"] #viewport{cursor:text;}
 body[data-tool="select"] #viewport{cursor:default;}
 
-/* ══════════════════════════════════════════
-   PEN SETTINGS PANEL
-══════════════════════════════════════════ */
 #pen-panel{
   position:fixed;z-index:2000;
   background:color-mix(in srgb,var(--panel) 94%,white 6%);
@@ -430,7 +382,6 @@ body[data-tool="select"] #viewport{cursor:default;}
 #pen-panel.pp-open{
   display:flex;opacity:1;transform:none;pointer-events:all;
 }
-/* caret */
 #pen-panel::before{
   content:'';position:absolute;
   top:22px;left:-7px;
@@ -450,7 +401,6 @@ body[data-tool="select"] #viewport{cursor:default;}
   #pen-panel.pp-open{transform:translateX(-50%) scale(1)!important;}
   #pen-panel::before{display:none;}
 }
-/* title */
 .pp-title{
   display:flex;align-items:center;justify-content:space-between;
   padding-bottom:10px;border-bottom:1px solid var(--border);
@@ -462,13 +412,11 @@ body[data-tool="select"] #viewport{cursor:default;}
   font-size:13px;color:color-mix(in srgb,var(--ink) 50%,transparent);
 }
 .pp-x:hover{background:rgba(0,0,0,0.08);}
-/* section */
 .pp-sect{display:flex;flex-direction:column;gap:6px;width:100%;}
 .pp-lbl{
   font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;
   color:color-mix(in srgb,var(--ink) 42%,transparent);
 }
-/* slider row */
 .pp-row{display:flex;align-items:center;gap:8px;}
 .pp-row input[type=range]{
   flex:1;height:3px;-webkit-appearance:none;appearance:none;
@@ -488,7 +436,6 @@ body[data-tool="select"] #viewport{cursor:default;}
   color:color-mix(in srgb,var(--ink) 60%,transparent);
   font-variant-numeric:tabular-nums;
 }
-/* chips */
 .pp-chips{display:flex;gap:5px;flex-wrap:wrap;}
 .pp-chip{
   padding:5px 9px;border-radius:8px;
@@ -499,7 +446,6 @@ body[data-tool="select"] #viewport{cursor:default;}
 }
 .pp-chip:hover{background:rgba(0,0,0,0.06);}
 .pp-chip.pp-on{background:var(--ink);color:var(--panel);border-color:var(--ink);}
-/* linecap buttons */
 .pp-caps{display:flex;gap:5px;}
 .pp-cap{
   flex:1;height:36px;border-radius:8px;
@@ -512,14 +458,12 @@ body[data-tool="select"] #viewport{cursor:default;}
 .pp-cap:hover{background:rgba(0,0,0,0.06);}
 .pp-cap.pp-on{background:var(--ink);color:var(--panel);border-color:var(--ink);}
 .pp-cap svg{pointer-events:none;}
-/* preview */
 #pp-preview-wrap{
   width:100%;height:42px;border-radius:9px;
   border:1.5px solid var(--border);background:var(--bg);
   overflow:hidden;display:flex;align-items:center;justify-content:center;
 }
 #pp-preview-svg{width:100%;height:100%;}
-/* dot badge on active draw buttons */
 #t-pen.active::after,#t-highlight.active::after,#t-eraser.active::after{
   content:'';position:absolute;bottom:5px;right:5px;
   width:5px;height:5px;border-radius:50%;
@@ -557,14 +501,12 @@ body[data-tool="select"] #viewport{cursor:default;}
 
 <canvas id="minimap" width="130" height="84"></canvas>
 
-<!-- ══ PEN SETTINGS PANEL ══ -->
+<!-- PEN SETTINGS PANEL -->
 <div id="pen-panel">
   <div class="pp-title">
     <span id="pp-title-txt">✏️ 펜 설정</span>
     <button class="pp-x" onclick="closePenPanel()">✕</button>
   </div>
-
-  <!-- 안정화 -->
   <div class="pp-sect">
     <div class="pp-lbl">펜 안정화 (smoothing)</div>
     <div class="pp-row">
@@ -578,8 +520,6 @@ body[data-tool="select"] #viewport{cursor:default;}
       <button class="pp-chip"       onclick="setPPSmooth(18,this)">강함</button>
     </div>
   </div>
-
-  <!-- 불투명도 -->
   <div class="pp-sect">
     <div class="pp-lbl">불투명도 (opacity)</div>
     <div class="pp-row">
@@ -587,8 +527,6 @@ body[data-tool="select"] #viewport{cursor:default;}
       <span class="pp-num" id="pp-opacity-v">100%</span>
     </div>
   </div>
-
-  <!-- 선 끝 모양 -->
   <div class="pp-sect" id="pp-cap-sect">
     <div class="pp-lbl">선 끝 모양 (linecap)</div>
     <div class="pp-caps">
@@ -606,8 +544,6 @@ body[data-tool="select"] #viewport{cursor:default;}
       </button>
     </div>
   </div>
-
-  <!-- 압력 효과 -->
   <div class="pp-sect" id="pp-pressure-sect">
     <div class="pp-lbl">끝 처리 (taper)</div>
     <div class="pp-chips" id="pp-pc">
@@ -617,8 +553,6 @@ body[data-tool="select"] #viewport{cursor:default;}
       <button class="pp-chip"       data-pressure="both"  onclick="setPPPressure(this)">양쪽</button>
     </div>
   </div>
-
-  <!-- 미리보기 -->
   <div class="pp-sect">
     <div class="pp-lbl">미리보기</div>
     <div id="pp-preview-wrap">
@@ -632,7 +566,7 @@ body[data-tool="select"] #viewport{cursor:default;}
   </div>
 </div>
 
-<!-- ══ TOOLBAR ══ -->
+<!-- TOOLBAR -->
 <div id="toolbar">
   <div id="toolbar-fixed">
     <button class="tbtn active" id="t-select" data-tip="선택 (V)" onclick="setTool('select')">⊹</button>
@@ -640,22 +574,18 @@ body[data-tool="select"] #viewport{cursor:default;}
     <div class="sep"></div>
   </div>
   <div id="toolbar-scroll">
-    <!-- 그리기 -->
     <button class="tbtn" id="t-pen"       data-tip="펜 (P) · 재클릭 → 설정"       onclick="setToolOrPanel('pen')">✏️</button>
     <button class="tbtn" id="t-highlight" data-tip="형광펜 (L) · 재클릭 → 설정"    onclick="setToolOrPanel('highlight')">🖊️</button>
     <button class="tbtn" id="t-eraser"    data-tip="지우개 (E) · 재클릭 → 설정"    onclick="setToolOrPanel('eraser')">◻</button>
     <div class="sep"></div>
-    <!-- 요소 추가 -->
     <button class="tbtn" id="t-sticky" data-tip="포스트잇 (S)"  onclick="addSticky()">📄</button>
     <button class="tbtn" id="t-text"   data-tip="텍스트 (T)"    onclick="setTool('text')">T</button>
     <button class="tbtn" id="t-rect"   data-tip="사각형 (R)"    onclick="setTool('rect')">□</button>
     <button class="tbtn" id="t-circle" data-tip="원 (C)"        onclick="setTool('circle')">○</button>
     <button class="tbtn" id="t-arrow"  data-tip="화살표 (A)"    onclick="setTool('arrow')">→</button>
     <div class="sep"></div>
-    <!-- 이미지 -->
     <button class="tbtn" data-tip="이미지" onclick="document.getElementById('img-in').click()">🖼️</button>
     <div class="sep"></div>
-    <!-- 색상 -->
     <div class="cdot active" style="background:#1a1714" data-c="#1a1714" onclick="setColor(this)"></div>
     <div class="cdot" style="background:#c84b2f" data-c="#c84b2f" onclick="setColor(this)"></div>
     <div class="cdot" style="background:#2b6cb0" data-c="#2b6cb0" onclick="setColor(this)"></div>
@@ -663,12 +593,10 @@ body[data-tool="select"] #viewport{cursor:default;}
     <div class="cdot" style="background:#7c3d9e" data-c="#7c3d9e" onclick="setColor(this)"></div>
     <div class="cdot" style="background:#e8a320" data-c="#e8a320" onclick="setColor(this)"></div>
     <div class="sep"></div>
-    <!-- 선 굵기 -->
     <button class="sbtn active" data-sw="2"  onclick="setStroke(this,2)"><div class="sline" style="height:2px"></div></button>
     <button class="sbtn"        data-sw="5"  onclick="setStroke(this,5)"><div class="sline" style="height:4px"></div></button>
     <button class="sbtn"        data-sw="10" onclick="setStroke(this,10)"><div class="sline" style="height:7px"></div></button>
     <div class="sep"></div>
-    <!-- 유틸 -->
     <button class="tbtn" data-tip="그리드 (G)"  onclick="toggleGrid()">⊞</button>
     <button class="tbtn" data-tip="저장 Ctrl+S" onclick="saveBoard()">💾</button>
     <button class="tbtn" data-tip="불러오기"     onclick="document.getElementById('load-in').click()">📂</button>
@@ -695,7 +623,6 @@ const selRect = document.getElementById('sel-rect');
 let T = {x:0, y:0, s:1};
 let tool='select', color='#1a1714', sw=2;
 
-/* ── pen settings ── */
 const penCfg = { smooth:0, opacity:100, cap:'round', pressure:'none' };
 let penPanelOpen = false;
 
@@ -717,7 +644,7 @@ let longPressTimer=null;
 /* ════════════════════════════════════════════════════════
    RESPONSIVE LAYOUT
 ════════════════════════════════════════════════════════ */
-const MOBILE_BP = 767; // px
+const MOBILE_BP = 767;
 
 function isMobile(){ return window.innerWidth <= MOBILE_BP; }
 
@@ -788,7 +715,6 @@ function setTool(t){
   closePenPanel();
 }
 
-/* ── 이미 선택된 그리기 도구를 다시 누르면 설정 패널 토글 ── */
 function setToolOrPanel(t){
   if(tool===t){
     togglePenPanel(t);
@@ -801,30 +727,25 @@ function setToolOrPanel(t){
    PEN SETTINGS PANEL
 ════════════════════════════════════════════════════════ */
 function togglePenPanel(t){
-  const pp=document.getElementById('pen-panel');
   if(penPanelOpen){ closePenPanel(); return; }
   openPenPanel(t);
 }
 function openPenPanel(t){
   const pp=document.getElementById('pen-panel');
-  // 제목 업데이트
   const titles={pen:'✏️ 펜 설정', highlight:'🖊️ 형광펜 설정', eraser:'◻ 지우개 설정'};
   document.getElementById('pp-title-txt').textContent = titles[t]||'설정';
-  // eraser는 일부 섹션 숨김
   const isEraser = t==='eraser';
   document.getElementById('pp-smooth').closest('.pp-sect').style.display = isEraser?'none':'';
   document.getElementById('pp-opacity').closest('.pp-sect').style.display = isEraser?'none':'';
   document.getElementById('pp-cap-sect').style.display      = isEraser?'none':'';
   document.getElementById('pp-pressure-sect').style.display = isEraser?'none':'';
   document.querySelector('#pp-preview-wrap').parentElement.style.display = isEraser?'none':'';
-  // 슬라이더 동기
   document.getElementById('pp-smooth').value  = penCfg.smooth;
   document.getElementById('pp-smooth-v').textContent = penCfg.smooth;
   document.getElementById('pp-opacity').value = penCfg.opacity;
   document.getElementById('pp-opacity-v').textContent = penCfg.opacity+'%';
   document.querySelectorAll('.pp-cap').forEach(c=>c.classList.toggle('pp-on', c.dataset.cap===penCfg.cap));
   document.querySelectorAll('#pp-pc .pp-chip').forEach(c=>c.classList.toggle('pp-on', c.dataset.pressure===penCfg.pressure));
-  // 위치 계산
   positionPenPanel(t);
   pp.style.display='flex';
   requestAnimationFrame(()=>{ pp.classList.add('pp-open'); });
@@ -838,7 +759,7 @@ function closePenPanel(){
   penPanelOpen=false;
 }
 function positionPenPanel(t){
-  if(window.innerWidth<=767) return; // 모바일: CSS로 처리
+  if(window.innerWidth<=767) return;
   const btn=document.getElementById('t-'+t);
   if(!btn) return;
   const br=btn.getBoundingClientRect();
@@ -851,7 +772,6 @@ function onPPChange(){
   penCfg.opacity = parseInt(document.getElementById('pp-opacity').value);
   document.getElementById('pp-smooth-v').textContent  = penCfg.smooth;
   document.getElementById('pp-opacity-v').textContent = penCfg.opacity+'%';
-  // 안정화 preset chips 동기
   const chips=[...document.querySelectorAll('#pp-sc .pp-chip')];
   const presets=[0,5,10,18];
   chips.forEach((c,i)=>c.classList.toggle('pp-on', presets[i]===penCfg.smooth));
@@ -903,7 +823,6 @@ function updatePPPreview(){
   }
 }
 
-/* 안정화 적용: 포인트 배열 스무딩 */
 function smoothPts(pts, level){
   if(level===0||pts.length<3) return pts;
   const out=[pts[0]];
@@ -1393,7 +1312,7 @@ vp.addEventListener('touchstart',e=>{
 },{passive:false});
 
 window.addEventListener('touchmove',e=>{
-  if(e.touches.length===2) return;
+  if(e.touches.length===2) return; // pinch handled separately
   if(e.touches.length!==1) return;
   cancelLongPress();
   const t=e.touches[0];
@@ -1439,27 +1358,73 @@ window.addEventListener('touchend',e=>{
 });
 
 /* ════════════════════════════════════════════════════════
-   PINCH ZOOM
+   PINCH ZOOM + PAN (two-finger) ★ UPDATED
 ════════════════════════════════════════════════════════ */
 let ltDist=null;
+let ltMid=null;
+let pinching=false;
+
 vp.addEventListener('touchstart',e=>{
-  if(e.touches.length===2)
-    ltDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  if(e.touches.length===2){
+    const t0=e.touches[0], t1=e.touches[1];
+    ltDist=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+    ltMid={x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2};
+    pinching=true;
+
+    // Cancel any ongoing single-touch action
+    drawing=false;
+    if(livePth && livePth.parentNode){ svgl.removeChild(livePth); livePth=null; }
+    drawPts=[];
+    shapeA=null;
+    touchPanOrigin=null;
+    if(touchLasso){ hideSelRect(); touchLasso=null; }
+    cancelLongPress();
+    pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  }
 },{passive:true});
+
 vp.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
     e.preventDefault();
-    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    if(ltDist){
-      const ns=Math.min(8,Math.max(0.08,T.s*(d/ltDist)));
+    const t0=e.touches[0], t1=e.touches[1];
+    const d=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+    const mid={x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2};
+
+    if(ltDist && ltMid){
+      // Zoom
+      const ns=Math.min(8, Math.max(0.08, T.s*(d/ltDist)));
       const r=getVpRect();
-      const mx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
-      const my=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
-      T.x=mx-(mx-T.x)*(ns/T.s); T.y=my-(my-T.y)*(ns/T.s); T.s=ns; applyT();
+      const mx=mid.x-r.left, my=mid.y-r.top;
+
+      // Zoom around midpoint
+      T.x = mx-(mx-T.x)*(ns/T.s);
+      T.y = my-(my-T.y)*(ns/T.s);
+      T.s = ns;
+
+      // Pan: add midpoint delta
+      T.x += mid.x - ltMid.x;
+      T.y += mid.y - ltMid.y;
+
+      applyT();
     }
+
     ltDist=d;
+    ltMid=mid;
   }
 },{passive:false});
+
+window.addEventListener('touchend',e=>{
+  if(e.touches.length<2){
+    ltDist=null;
+    ltMid=null;
+    pinching=false;
+  }
+});
+window.addEventListener('touchcancel',()=>{
+  ltDist=null;
+  ltMid=null;
+  pinching=false;
+});
 
 /* ════════════════════════════════════════════════════════
    STICKY
@@ -1923,12 +1888,9 @@ function clearAll(){
 /* ════════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════════ */
-// First sync (before adding startup content so positions are correct)
 syncLayout();
 applyT();
-
 ensureStartupWindows();
-
 showSnack('∞ Canvas 준비 완료 ✦');
 </script>
 </body>
