@@ -1,0 +1,1935 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5f2eb">
+<title>∞ Canvas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&display=swap');
+
+/* ══════════════════════════════════════════
+   ROOT TOKENS
+══════════════════════════════════════════ */
+:root {
+  --bg:#f5f2eb; --grid:#d8d3c8; --ink:#1a1714;
+  --panel:#faf8f4; --border:#c8c3b8; --shadow:rgba(26,23,20,0.14);
+  --accent:#c84b2f; --accent2:#2b6cb0;
+  /* layout sizes – overridden by JS */
+  --tb-w: 60px;   /* sidebar width  (≥768px) */
+  --tb-h: 60px;   /* bottom bar h   (<768px) */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top,    0px);
+  --safe-l: env(safe-area-inset-left,   0px);
+  --safe-r: env(safe-area-inset-right,  0px);
+}
+
+/* ── Reset ── */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;}
+body{
+  font-family:'DM Mono',monospace;
+  background:var(--bg);
+  user-select:none;-webkit-user-select:none;
+  touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* ══════════════════════════════════════════
+   CANVAS LAYERS
+══════════════════════════════════════════ */
+#grid{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(circle,var(--grid) 1.5px,transparent 1.5px);
+  background-size:40px 40px;
+}
+#viewport{position:fixed;overflow:hidden;z-index:1;}
+#board{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;}
+#svg-layer{position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;}
+#preview-canvas{position:fixed;pointer-events:none;z-index:500;}
+
+/* Selection lasso */
+#sel-rect{
+  position:fixed;border:1.5px solid var(--accent2);
+  background:rgba(43,108,176,0.08);pointer-events:none;
+  display:none;z-index:600;border-radius:2px;
+}
+.el.lasso-hover>.el-body{outline:2px dashed var(--accent2);outline-offset:2px;}
+
+/* ══════════════════════════════════════════
+   ELEMENTS (sticky / text / image)
+══════════════════════════════════════════ */
+.el{position:absolute;}
+.el-body{width:100%;height:100%;border-radius:2px;}
+.el-handles{display:none;position:absolute;inset:-1px;pointer-events:none;}
+.el.selected>.el-body{outline:2px solid var(--accent2);outline-offset:2px;}
+.el.selected>.el-handles{display:block;}
+
+.h-move{position:absolute;inset:0;cursor:move;pointer-events:all;}
+.h-resize{
+  position:absolute;width:12px;height:12px;
+  background:white;border:2px solid var(--accent2);border-radius:2px;pointer-events:all;
+}
+.h-resize.nw{top:-6px;left:-6px;cursor:nw-resize;}
+.h-resize.ne{top:-6px;right:-6px;cursor:ne-resize;}
+.h-resize.se{bottom:-6px;right:-6px;cursor:se-resize;}
+.h-resize.sw{bottom:-6px;left:-6px;cursor:sw-resize;}
+.h-resize.n{top:-6px;left:calc(50% - 6px);cursor:n-resize;}
+.h-resize.s{bottom:-6px;left:calc(50% - 6px);cursor:s-resize;}
+.h-resize.e{top:calc(50% - 6px);right:-6px;cursor:e-resize;}
+.h-resize.w{top:calc(50% - 6px);left:-6px;cursor:w-resize;}
+
+/* Touch: bigger hit targets */
+@media(pointer:coarse){
+  .h-resize{width:20px;height:20px;}
+  .h-resize.nw{top:-10px;left:-10px;}
+  .h-resize.ne{top:-10px;right:-10px;}
+  .h-resize.se{bottom:-10px;right:-10px;}
+  .h-resize.sw{bottom:-10px;left:-10px;}
+  .h-resize.n{top:-10px;left:calc(50% - 10px);}
+  .h-resize.s{bottom:-10px;left:calc(50% - 10px);}
+  .h-resize.e{top:calc(50% - 10px);right:-10px;}
+  .h-resize.w{top:calc(50% - 10px);left:-10px;}
+}
+
+/* Sticky */
+.sticky-body{
+  padding:10px;display:flex;flex-direction:column;
+  box-shadow:3px 5px 14px var(--shadow);min-width:120px;min-height:90px;
+}
+.sticky-bar{display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px;flex-shrink:0;}
+.sticky-btn{
+  width:18px;height:18px;border:none;border-radius:50%;
+  background:rgba(0,0,0,0.18);color:rgba(0,0,0,0.6);font-size:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.sticky-btn:hover{opacity:.7;}
+.sticky-body textarea{
+  flex:1;border:none;background:transparent;resize:none;
+  font-family:'Fraunces',serif;font-size:14px;font-weight:300;line-height:1.55;
+  color:var(--ink);outline:none;cursor:text;min-height:60px;
+}
+
+/* Text */
+.text-body{
+  padding:4px 6px;min-width:60px;min-height:30px;white-space:pre-wrap;
+  word-break:break-word;font-family:'Fraunces',serif;font-weight:300;
+  line-height:1.4;outline:none;cursor:text;background:transparent;
+}
+
+/* Startup windows */
+.start-window{position:absolute;}
+.start-window-body{
+  width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;
+  border-radius:18px;background:color-mix(in srgb, var(--panel) 92%, white 8%);
+  border:1.5px solid color-mix(in srgb, var(--border) 85%, white 15%);
+  box-shadow:0 14px 32px rgba(26,23,20,0.18);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.start-window-header{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px;border-bottom:1px solid rgba(0,0,0,0.08);
+  background:rgba(255,255,255,0.45);cursor:move;touch-action:none;
+}
+.start-window-title{font-size:13px;font-weight:500;letter-spacing:-0.02em;color:var(--ink);}
+.start-window-close{
+  width:24px;height:24px;border:none;border-radius:999px;cursor:pointer;
+  background:rgba(0,0,0,0.08);color:var(--ink);font-size:12px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.start-window-content{padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;}
+.start-window-note{
+  font-family:'Fraunces',serif;font-size:14px;line-height:1.5;color:#4d463f;
+}
+.start-window-actions,.recent-toolbar{display:flex;flex-direction:column;gap:8px;}
+.launch-btn{
+  width:100%;border:none;border-radius:12px;padding:11px 12px;cursor:pointer;
+  background:#ece6db;color:var(--ink);font-family:'DM Mono',monospace;font-size:12px;
+  text-align:left;
+}
+.launch-btn.primary{background:var(--ink);color:var(--panel);}
+.launch-btn.ghost{background:transparent;border:1px solid var(--border);}
+.launch-btn.small{padding:8px 10px;font-size:11px;border-radius:10px;}
+.recent-list{display:flex;flex-direction:column;gap:8px;overflow:auto;min-height:0;padding-right:2px;}
+.recent-item{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:10px;background:rgba(255,255,255,0.55);
+}
+.recent-main{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.recent-name{font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.recent-meta{font-size:10px;color:#756d64;}
+.recent-actions{display:flex;gap:6px;flex-shrink:0;}
+.recent-empty{
+  border:1px dashed rgba(0,0,0,0.14);border-radius:12px;padding:12px;
+  color:#756d64;font-size:12px;line-height:1.5;background:rgba(255,255,255,0.35);
+}
+.shortcut-list{display:flex;flex-direction:column;gap:8px;overflow:auto;min-height:0;}
+.shortcut-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:8px 10px;background:rgba(255,255,255,0.52);
+}
+.shortcut-key{
+  display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:28px;
+  padding:0 10px;border-radius:999px;background:var(--ink);color:var(--panel);font-size:11px;
+}
+.shortcut-desc{font-size:12px;color:var(--ink);text-align:right;line-height:1.4;}
+
+/* Image */
+.image-body{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:1px;}
+
+/* ══════════════════════════════════════════
+   SHARED BUTTON / DOT / STROKE STYLES
+══════════════════════════════════════════ */
+.tbtn{
+  display:flex;align-items:center;justify-content:center;
+  border:none;border-radius:8px;background:transparent;
+  cursor:pointer;font-size:16px;color:var(--ink);
+  transition:background .12s,transform .1s;
+  position:relative;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;
+}
+.tbtn:active{transform:scale(.93);}
+.tbtn.active{background:var(--ink);color:var(--panel);}
+
+/* tooltip — desktop only */
+@media(hover:hover){
+  .tbtn[data-tip]:hover{background:rgba(0,0,0,0.07);transform:translateY(-1px);}
+  .tbtn[data-tip]:hover::after{
+    content:attr(data-tip);position:absolute;
+    background:var(--ink);color:var(--panel);font-size:10px;
+    padding:3px 7px;border-radius:5px;white-space:nowrap;pointer-events:none;z-index:9999;
+  }
+}
+
+.cdot{
+  border-radius:50%;cursor:pointer;border:2px solid transparent;
+  transition:transform .1s,border-color .1s;flex-shrink:0;
+}
+.cdot:hover{transform:scale(1.2);}
+.cdot.active{border-color:var(--ink);transform:scale(1.15);}
+
+.sbtn{
+  display:flex;align-items:center;justify-content:center;
+  border:1.5px solid var(--border);border-radius:6px;
+  cursor:pointer;background:transparent;transition:background .12s;flex-shrink:0;
+}
+.sbtn:hover{background:rgba(0,0,0,0.07);}
+.sbtn.active{background:var(--ink);}
+.sbtn.active .sline{background:var(--panel);}
+.sline{border-radius:99px;background:var(--ink);width:60%;}
+
+.sep{background:var(--border);flex-shrink:0;}
+
+/* ══════════════════════════════════════════
+   ★ FLOATING TOOLBAR (all platforms)
+══════════════════════════════════════════ */
+#toolbar{
+  position:fixed;
+  left:calc(14px + var(--safe-l));
+  top:calc(70px + var(--safe-t));
+  z-index:1000;
+  width:clamp(52px, 6.2vw, 64px);
+  max-height:calc(100vh - var(--safe-t) - var(--safe-b) - 86px);
+  background:color-mix(in srgb, var(--panel) 88%, white 12%);
+  border:1.5px solid color-mix(in srgb, var(--border) 82%, white 18%);
+  border-radius:18px;
+  box-shadow:0 12px 32px rgba(26,23,20,0.16);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:8px;
+  padding:10px 8px;
+  overflow:hidden;
+}
+#toolbar-fixed,#toolbar-scroll{display:flex;flex-direction:column;align-items:center;gap:4px;}
+#toolbar-fixed{flex:0 0 auto;padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,0.08);}
+#toolbar-scroll{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;padding-right:1px;}
+#toolbar-scroll::-webkit-scrollbar{display:none;}
+#toolbar .tbtn{width:clamp(40px, 4.8vw, 46px);height:clamp(40px, 4.8vw, 46px);font-size:clamp(15px, 1.8vw, 18px);}
+#toolbar .tbtn[data-tip]:hover::after{left:calc(100% + 8px);top:50%;transform:translateY(-50%);}
+#toolbar .cdot{width:clamp(18px, 2.1vw, 22px);height:clamp(18px, 2.1vw, 22px);}
+#toolbar .sbtn{width:clamp(30px, 3.8vw, 36px);height:clamp(22px, 2.8vw, 28px);}
+#toolbar .sep{width:60%;height:1px;margin:4px 0;}
+#toolbar-fixed .sep{margin-top:6px;}
+
+/* tablet tuning */
+@media(max-width:1024px){
+  #toolbar{
+    left:calc(12px + var(--safe-l));
+    top:calc(64px + var(--safe-t));
+    width:58px;
+    max-height:calc(100vh - var(--safe-t) - var(--safe-b) - 78px);
+    border-radius:16px;
+  }
+  #toolbar .tbtn{width:42px;height:42px;font-size:17px;}
+}
+
+/* phone: floating bottom rail */
+@media(max-width:767px){
+  #toolbar{
+    left:calc(10px + var(--safe-l));
+    right:calc(10px + var(--safe-r));
+    top:auto;
+    bottom:calc(10px + var(--safe-b));
+    width:auto;
+    max-height:none;
+    flex-direction:row;
+    align-items:stretch;
+    gap:8px;
+    padding:8px 10px;
+    border-radius:18px;
+  }
+  #toolbar-fixed{
+    flex-direction:row;
+    align-items:center;
+    padding-bottom:0;
+    padding-right:8px;
+    border-bottom:none;
+    border-right:1px solid rgba(0,0,0,0.08);
+  }
+  #toolbar-scroll{
+    flex-direction:row;
+    align-items:center;
+    justify-content:flex-start;
+    gap:3px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    padding-bottom:0;
+  }
+  #toolbar .tbtn{width:40px;height:40px;font-size:18px;flex-shrink:0;}
+  #toolbar .cdot{width:22px;height:22px;flex-shrink:0;}
+  #toolbar .sbtn{width:30px;height:30px;flex-shrink:0;}
+  #toolbar .sep{width:1px;height:28px;margin:0 2px;}
+  #toolbar-fixed .sep{margin:0 2px 0 6px;}
+  #toolbar .tbtn[data-tip]:hover::after{display:none;}
+}
+
+/* ══════════════════════════════════════════
+   TOPBAR
+══════════════════════════════════════════ */
+#topbar{
+  position:fixed;z-index:1000;
+  display:flex;align-items:center;gap:6px;
+  pointer-events:none;
+}
+#topbar>*{pointer-events:all;}
+
+/* desktop/tablet: top-center */
+#topbar{
+  top:calc(14px + var(--safe-t));
+  left:0;
+  right:0;
+  justify-content:center;
+}
+.pill{
+  background:var(--panel);border:1.5px solid var(--border);border-radius:999px;
+  padding:5px 13px;font-size:11px;color:var(--ink);
+  box-shadow:0 2px 8px var(--shadow);letter-spacing:.05em;white-space:nowrap;
+}
+#zoom-pill{cursor:pointer;min-width:54px;text-align:center;}
+#zoom-pill:hover{background:rgba(0,0,0,0.06);}
+
+/* mobile: top-right corner */
+@media(max-width:767px){
+  #topbar{
+    top:calc(10px + var(--safe-t));
+    left:auto;
+    right:calc(10px + var(--safe-r));
+    justify-content:flex-end;
+  }
+  #title-pill{display:none;}
+  .pill{padding:4px 10px;font-size:10px;}
+}
+
+/* ══════════════════════════════════════════
+   CONTEXT MENU
+══════════════════════════════════════════ */
+#ctx{
+  position:fixed;z-index:9999;background:var(--panel);
+  border:1.5px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 30px var(--shadow);padding:6px;display:none;min-width:140px;
+}
+.citem{
+  padding:9px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink);
+  transition:background .1s;
+}
+.citem:hover,.citem:active{background:rgba(0,0,0,0.07);}
+.citem.danger{color:var(--accent);}
+.cdiv{height:1px;background:var(--border);margin:4px 0;}
+
+/* ══════════════════════════════════════════
+   SNACKBAR
+══════════════════════════════════════════ */
+#snack{
+  position:fixed;left:50%;
+  transform:translateX(-50%) translateY(-8px);
+  background:var(--ink);color:var(--panel);
+  font-size:11px;padding:6px 14px;border-radius:999px;
+  opacity:0;transition:opacity .2s,transform .2s;
+  z-index:9999;pointer-events:none;white-space:nowrap;
+}
+#snack.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* desktop: below topbar */
+#snack{top:58px;}
+@media(max-width:767px){
+  #snack{top:calc(50px + var(--safe-t));}
+}
+
+/* ══════════════════════════════════════════
+   MINIMAP
+══════════════════════════════════════════ */
+#minimap{
+  position:fixed;right:16px;
+  width:130px;height:84px;
+  background:var(--panel);border:1.5px solid var(--border);border-radius:8px;
+  overflow:hidden;box-shadow:0 2px 10px var(--shadow);z-index:999;
+  bottom:16px;
+}
+/* hide on small screens */
+@media(max-width:767px){
+  #minimap{display:none;}
+}
+
+/* ══════════════════════════════════════════
+   CURSOR OVERRIDES
+══════════════════════════════════════════ */
+body[data-tool="pan"] #viewport{cursor:grab;}
+body[data-tool="pan"].panning #viewport{cursor:grabbing;}
+body[data-tool="pen"] #viewport,
+body[data-tool="highlight"] #viewport,
+body[data-tool="eraser"] #viewport,
+body[data-tool="rect"] #viewport,
+body[data-tool="circle"] #viewport,
+body[data-tool="arrow"] #viewport{cursor:crosshair;}
+body[data-tool="text"] #viewport{cursor:text;}
+body[data-tool="select"] #viewport{cursor:default;}
+
+/* ══════════════════════════════════════════
+   PEN SETTINGS PANEL
+══════════════════════════════════════════ */
+#pen-panel{
+  position:fixed;z-index:2000;
+  background:color-mix(in srgb,var(--panel) 94%,white 6%);
+  border:1.5px solid color-mix(in srgb,var(--border) 80%,white 20%);
+  border-radius:16px;
+  box-shadow:0 16px 48px rgba(26,23,20,0.20);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:14px 14px 16px;
+  width:228px;
+  display:none;flex-direction:column;gap:13px;
+  font-size:11px;color:var(--ink);letter-spacing:.03em;
+  opacity:0;transform:translateX(-6px) scale(.97);
+  transition:opacity .15s,transform .15s;
+  pointer-events:none;
+}
+#pen-panel.pp-open{
+  display:flex;opacity:1;transform:none;pointer-events:all;
+}
+/* caret */
+#pen-panel::before{
+  content:'';position:absolute;
+  top:22px;left:-7px;
+  width:11px;height:11px;
+  background:color-mix(in srgb,var(--panel) 94%,white 6%);
+  border-left:1.5px solid color-mix(in srgb,var(--border) 80%,white 20%);
+  border-bottom:1.5px solid color-mix(in srgb,var(--border) 80%,white 20%);
+  transform:rotate(45deg);border-radius:0 0 0 3px;
+}
+@media(max-width:767px){
+  #pen-panel{
+    left:50%!important;top:auto!important;
+    bottom:calc(78px + var(--safe-b));
+    transform:translateX(-50%) scale(.97)!important;
+    width:min(340px,92vw);
+  }
+  #pen-panel.pp-open{transform:translateX(-50%) scale(1)!important;}
+  #pen-panel::before{display:none;}
+}
+/* title */
+.pp-title{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:10px;border-bottom:1px solid var(--border);
+  font-weight:500;font-size:11.5px;letter-spacing:.04em;
+}
+.pp-x{
+  width:22px;height:22px;border:none;background:transparent;
+  border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:color-mix(in srgb,var(--ink) 50%,transparent);
+}
+.pp-x:hover{background:rgba(0,0,0,0.08);}
+/* section */
+.pp-sect{display:flex;flex-direction:column;gap:6px;width:100%;}
+.pp-lbl{
+  font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;
+  color:color-mix(in srgb,var(--ink) 42%,transparent);
+}
+/* slider row */
+.pp-row{display:flex;align-items:center;gap:8px;}
+.pp-row input[type=range]{
+  flex:1;height:3px;-webkit-appearance:none;appearance:none;
+  background:var(--border);border-radius:99px;outline:none;cursor:pointer;
+}
+.pp-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:17px;height:17px;border-radius:50%;
+  background:var(--ink);border:2.5px solid var(--panel);
+  box-shadow:0 1px 5px rgba(0,0,0,.28);cursor:pointer;
+}
+.pp-row input[type=range]::-moz-range-thumb{
+  width:17px;height:17px;border-radius:50%;background:var(--ink);
+  border:2.5px solid var(--panel);box-shadow:0 1px 5px rgba(0,0,0,.28);
+}
+.pp-num{
+  min-width:30px;text-align:right;font-size:11px;
+  color:color-mix(in srgb,var(--ink) 60%,transparent);
+  font-variant-numeric:tabular-nums;
+}
+/* chips */
+.pp-chips{display:flex;gap:5px;flex-wrap:wrap;}
+.pp-chip{
+  padding:5px 9px;border-radius:8px;
+  border:1.5px solid var(--border);
+  font-size:10px;cursor:pointer;background:transparent;color:var(--ink);
+  transition:background .12s,border-color .12s,color .12s;
+  font-family:'DM Mono',monospace;
+}
+.pp-chip:hover{background:rgba(0,0,0,0.06);}
+.pp-chip.pp-on{background:var(--ink);color:var(--panel);border-color:var(--ink);}
+/* linecap buttons */
+.pp-caps{display:flex;gap:5px;}
+.pp-cap{
+  flex:1;height:36px;border-radius:8px;
+  border:1.5px solid var(--border);background:transparent;
+  cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;
+  font-size:8.5px;color:var(--ink);font-family:'DM Mono',monospace;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.pp-cap:hover{background:rgba(0,0,0,0.06);}
+.pp-cap.pp-on{background:var(--ink);color:var(--panel);border-color:var(--ink);}
+.pp-cap svg{pointer-events:none;}
+/* preview */
+#pp-preview-wrap{
+  width:100%;height:42px;border-radius:9px;
+  border:1.5px solid var(--border);background:var(--bg);
+  overflow:hidden;display:flex;align-items:center;justify-content:center;
+}
+#pp-preview-svg{width:100%;height:100%;}
+/* dot badge on active draw buttons */
+#t-pen.active::after,#t-highlight.active::after,#t-eraser.active::after{
+  content:'';position:absolute;bottom:5px;right:5px;
+  width:5px;height:5px;border-radius:50%;
+  background:var(--accent);opacity:.8;pointer-events:none;
+}
+</style>
+</head>
+<body data-tool="select">
+
+<div id="grid"></div>
+<canvas id="preview-canvas"></canvas>
+<div id="sel-rect"></div>
+
+<div id="topbar">
+  <div class="pill" id="title-pill">∞ Canvas</div>
+  <div class="pill" id="zoom-pill" onclick="resetView()">100%</div>
+</div>
+
+<div id="ctx">
+  <div class="citem" onclick="ctxDo('front')">↑ 맨 앞으로</div>
+  <div class="citem" onclick="ctxDo('back')">↓ 맨 뒤로</div>
+  <div class="cdiv"></div>
+  <div class="citem" onclick="ctxDo('dup')">⊞ 복제</div>
+  <div class="cdiv"></div>
+  <div class="citem danger" onclick="ctxDo('del')">✕ 삭제</div>
+</div>
+
+<div id="snack"></div>
+
+<div id="viewport">
+  <div id="board">
+    <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<canvas id="minimap" width="130" height="84"></canvas>
+
+<!-- ══ PEN SETTINGS PANEL ══ -->
+<div id="pen-panel">
+  <div class="pp-title">
+    <span id="pp-title-txt">✏️ 펜 설정</span>
+    <button class="pp-x" onclick="closePenPanel()">✕</button>
+  </div>
+
+  <!-- 안정화 -->
+  <div class="pp-sect">
+    <div class="pp-lbl">펜 안정화 (smoothing)</div>
+    <div class="pp-row">
+      <input type="range" id="pp-smooth" min="0" max="20" step="1" value="0" oninput="onPPChange()">
+      <span class="pp-num" id="pp-smooth-v">0</span>
+    </div>
+    <div class="pp-chips" id="pp-sc">
+      <button class="pp-chip pp-on" onclick="setPPSmooth(0,this)">없음</button>
+      <button class="pp-chip"       onclick="setPPSmooth(5,this)">약간</button>
+      <button class="pp-chip"       onclick="setPPSmooth(10,this)">보통</button>
+      <button class="pp-chip"       onclick="setPPSmooth(18,this)">강함</button>
+    </div>
+  </div>
+
+  <!-- 불투명도 -->
+  <div class="pp-sect">
+    <div class="pp-lbl">불투명도 (opacity)</div>
+    <div class="pp-row">
+      <input type="range" id="pp-opacity" min="5" max="100" step="5" value="100" oninput="onPPChange()">
+      <span class="pp-num" id="pp-opacity-v">100%</span>
+    </div>
+  </div>
+
+  <!-- 선 끝 모양 -->
+  <div class="pp-sect" id="pp-cap-sect">
+    <div class="pp-lbl">선 끝 모양 (linecap)</div>
+    <div class="pp-caps">
+      <button class="pp-cap pp-on" data-cap="round"  onclick="setPPCap(this)">
+        <svg width="30" height="10"><line x1="5" y1="5" x2="25" y2="5" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
+        <span>둥글게</span>
+      </button>
+      <button class="pp-cap" data-cap="square" onclick="setPPCap(this)">
+        <svg width="30" height="10"><line x1="5" y1="5" x2="25" y2="5" stroke="currentColor" stroke-width="5" stroke-linecap="square"/></svg>
+        <span>각지게</span>
+      </button>
+      <button class="pp-cap" data-cap="butt"   onclick="setPPCap(this)">
+        <svg width="30" height="10"><line x1="7" y1="5" x2="23" y2="5" stroke="currentColor" stroke-width="5" stroke-linecap="butt"/></svg>
+        <span>짧게</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 압력 효과 -->
+  <div class="pp-sect" id="pp-pressure-sect">
+    <div class="pp-lbl">끝 처리 (taper)</div>
+    <div class="pp-chips" id="pp-pc">
+      <button class="pp-chip pp-on" data-pressure="none"  onclick="setPPPressure(this)">없음</button>
+      <button class="pp-chip"       data-pressure="start" onclick="setPPPressure(this)">시작</button>
+      <button class="pp-chip"       data-pressure="end"   onclick="setPPPressure(this)">끝</button>
+      <button class="pp-chip"       data-pressure="both"  onclick="setPPPressure(this)">양쪽</button>
+    </div>
+  </div>
+
+  <!-- 미리보기 -->
+  <div class="pp-sect">
+    <div class="pp-lbl">미리보기</div>
+    <div id="pp-preview-wrap">
+      <svg id="pp-preview-svg" viewBox="0 0 200 42" preserveAspectRatio="none">
+        <path id="pp-preview-path"
+          d="M10,30 Q30,10 50,22 Q70,34 90,18 Q110,8 130,22 Q150,34 170,16 Q185,8 192,14"
+          fill="none" stroke="#1a1714" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOOLBAR ══ -->
+<div id="toolbar">
+  <div id="toolbar-fixed">
+    <button class="tbtn active" id="t-select" data-tip="선택 (V)" onclick="setTool('select')">⊹</button>
+    <button class="tbtn" id="t-pan" data-tip="이동 (H)" onclick="setTool('pan')">✋</button>
+    <div class="sep"></div>
+  </div>
+  <div id="toolbar-scroll">
+    <!-- 그리기 -->
+    <button class="tbtn" id="t-pen"       data-tip="펜 (P) · 재클릭 → 설정"       onclick="setToolOrPanel('pen')">✏️</button>
+    <button class="tbtn" id="t-highlight" data-tip="형광펜 (L) · 재클릭 → 설정"    onclick="setToolOrPanel('highlight')">🖊️</button>
+    <button class="tbtn" id="t-eraser"    data-tip="지우개 (E) · 재클릭 → 설정"    onclick="setToolOrPanel('eraser')">◻</button>
+    <div class="sep"></div>
+    <!-- 요소 추가 -->
+    <button class="tbtn" id="t-sticky" data-tip="포스트잇 (S)"  onclick="addSticky()">📄</button>
+    <button class="tbtn" id="t-text"   data-tip="텍스트 (T)"    onclick="setTool('text')">T</button>
+    <button class="tbtn" id="t-rect"   data-tip="사각형 (R)"    onclick="setTool('rect')">□</button>
+    <button class="tbtn" id="t-circle" data-tip="원 (C)"        onclick="setTool('circle')">○</button>
+    <button class="tbtn" id="t-arrow"  data-tip="화살표 (A)"    onclick="setTool('arrow')">→</button>
+    <div class="sep"></div>
+    <!-- 이미지 -->
+    <button class="tbtn" data-tip="이미지" onclick="document.getElementById('img-in').click()">🖼️</button>
+    <div class="sep"></div>
+    <!-- 색상 -->
+    <div class="cdot active" style="background:#1a1714" data-c="#1a1714" onclick="setColor(this)"></div>
+    <div class="cdot" style="background:#c84b2f" data-c="#c84b2f" onclick="setColor(this)"></div>
+    <div class="cdot" style="background:#2b6cb0" data-c="#2b6cb0" onclick="setColor(this)"></div>
+    <div class="cdot" style="background:#2d8a4e" data-c="#2d8a4e" onclick="setColor(this)"></div>
+    <div class="cdot" style="background:#7c3d9e" data-c="#7c3d9e" onclick="setColor(this)"></div>
+    <div class="cdot" style="background:#e8a320" data-c="#e8a320" onclick="setColor(this)"></div>
+    <div class="sep"></div>
+    <!-- 선 굵기 -->
+    <button class="sbtn active" data-sw="2"  onclick="setStroke(this,2)"><div class="sline" style="height:2px"></div></button>
+    <button class="sbtn"        data-sw="5"  onclick="setStroke(this,5)"><div class="sline" style="height:4px"></div></button>
+    <button class="sbtn"        data-sw="10" onclick="setStroke(this,10)"><div class="sline" style="height:7px"></div></button>
+    <div class="sep"></div>
+    <!-- 유틸 -->
+    <button class="tbtn" data-tip="그리드 (G)"  onclick="toggleGrid()">⊞</button>
+    <button class="tbtn" data-tip="저장 Ctrl+S" onclick="saveBoard()">💾</button>
+    <button class="tbtn" data-tip="불러오기"     onclick="document.getElementById('load-in').click()">📂</button>
+    <button class="tbtn" data-tip="전체 지우기"  onclick="clearAll()">🗑️</button>
+  </div>
+</div>
+
+<input type="file" id="img-in"  accept="image/*"       style="display:none" onchange="handleImg(event)">
+<input type="file" id="load-in" style="display:none" onchange="loadBoard(event)">
+
+<script>
+/* ════════════════════════════════════════════════════════
+   GLOBALS
+════════════════════════════════════════════════════════ */
+const vp    = document.getElementById('viewport');
+const board = document.getElementById('board');
+const svgl  = document.getElementById('svg-layer');
+const pCvs  = document.getElementById('preview-canvas');
+const pCtx  = pCvs.getContext('2d');
+const mmCvs = document.getElementById('minimap');
+const mmCtx = mmCvs.getContext('2d');
+const selRect = document.getElementById('sel-rect');
+
+let T = {x:0, y:0, s:1};
+let tool='select', color='#1a1714', sw=2;
+
+/* ── pen settings ── */
+const penCfg = { smooth:0, opacity:100, cap:'round', pressure:'none' };
+let penPanelOpen = false;
+
+let panning=false, panOrigin={x:0,y:0};
+let drawing=false, drawPts=[], livePth=null, shapeA=null;
+let dragging=null;
+let resizing=null;
+let selected=null;
+let selectedEls=[];
+let lasso=null;
+let touchLasso=null;
+let touchPanOrigin=null;
+let ctxEl=null;
+let strokes=[];
+let zTop=10;
+let gridOn=true;
+let longPressTimer=null;
+
+/* ════════════════════════════════════════════════════════
+   RESPONSIVE LAYOUT
+════════════════════════════════════════════════════════ */
+const MOBILE_BP = 767; // px
+
+function isMobile(){ return window.innerWidth <= MOBILE_BP; }
+
+function syncLayout(){
+  const tb = document.getElementById('toolbar');
+  const mm = document.getElementById('minimap');
+  const tbRect = tb.getBoundingClientRect();
+
+  document.documentElement.style.setProperty('--tb-w', '0px');
+  document.documentElement.style.setProperty('--tb-h', '0px');
+
+  vp.style.cssText = `top:0;left:0;right:0;bottom:0;`;
+  pCvs.style.cssText = `top:0;left:0;right:0;bottom:0;width:${window.innerWidth}px;height:${window.innerHeight}px;`;
+  pCvs.width  = window.innerWidth;
+  pCvs.height = window.innerHeight;
+
+  if(mm){
+    mm.style.bottom = isMobile() ? `${Math.ceil(tbRect.height) + 20}px` : '16px';
+    mm.style.right = '16px';
+  }
+
+  updateGrid();
+  updateMinimap();
+}
+
+window.addEventListener('resize', ()=>{ syncLayout(); });
+window.addEventListener('orientationchange', ()=>setTimeout(syncLayout, 250));
+
+/* ════════════════════════════════════════════════════════
+   TRANSFORM
+════════════════════════════════════════════════════════ */
+function applyT(){
+  board.style.transform = `translate(${T.x}px,${T.y}px) scale(${T.s})`;
+  document.getElementById('zoom-pill').textContent = Math.round(T.s*100)+'%';
+  updateGrid(); updateMinimap();
+}
+function getVpRect(){ return vp.getBoundingClientRect(); }
+function s2b(sx,sy){
+  const r=getVpRect();
+  return {x:(sx-r.left-T.x)/T.s, y:(sy-r.top-T.y)/T.s};
+}
+function b2s(bx,by){
+  const r=getVpRect();
+  return {x:r.left+bx*T.s+T.x, y:r.top+by*T.s+T.y};
+}
+function resetView(){ T={x:0,y:0,s:1}; applyT(); }
+
+function updateGrid(){
+  const g = document.getElementById('grid');
+  if(!gridOn){ g.style.display='none'; return; }
+  g.style.display='block';
+  const sz = 40*T.s;
+  g.style.backgroundSize = `${sz}px ${sz}px`;
+  g.style.backgroundPosition = `${T.x%sz}px ${T.y%sz}px`;
+}
+function toggleGrid(){ gridOn=!gridOn; updateGrid(); }
+
+/* ════════════════════════════════════════════════════════
+   TOOL / COLOR / STROKE
+════════════════════════════════════════════════════════ */
+function setTool(t){
+  tool=t;
+  document.body.setAttribute('data-tool',t);
+  document.querySelectorAll('.tbtn[id^="t-"]').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById('t-'+t);
+  if(btn) btn.classList.add('active');
+  deselectAll(); closeCtx();
+  closePenPanel();
+}
+
+/* ── 이미 선택된 그리기 도구를 다시 누르면 설정 패널 토글 ── */
+function setToolOrPanel(t){
+  if(tool===t){
+    togglePenPanel(t);
+  } else {
+    setTool(t);
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   PEN SETTINGS PANEL
+════════════════════════════════════════════════════════ */
+function togglePenPanel(t){
+  const pp=document.getElementById('pen-panel');
+  if(penPanelOpen){ closePenPanel(); return; }
+  openPenPanel(t);
+}
+function openPenPanel(t){
+  const pp=document.getElementById('pen-panel');
+  // 제목 업데이트
+  const titles={pen:'✏️ 펜 설정', highlight:'🖊️ 형광펜 설정', eraser:'◻ 지우개 설정'};
+  document.getElementById('pp-title-txt').textContent = titles[t]||'설정';
+  // eraser는 일부 섹션 숨김
+  const isEraser = t==='eraser';
+  document.getElementById('pp-smooth').closest('.pp-sect').style.display = isEraser?'none':'';
+  document.getElementById('pp-opacity').closest('.pp-sect').style.display = isEraser?'none':'';
+  document.getElementById('pp-cap-sect').style.display      = isEraser?'none':'';
+  document.getElementById('pp-pressure-sect').style.display = isEraser?'none':'';
+  document.querySelector('#pp-preview-wrap').parentElement.style.display = isEraser?'none':'';
+  // 슬라이더 동기
+  document.getElementById('pp-smooth').value  = penCfg.smooth;
+  document.getElementById('pp-smooth-v').textContent = penCfg.smooth;
+  document.getElementById('pp-opacity').value = penCfg.opacity;
+  document.getElementById('pp-opacity-v').textContent = penCfg.opacity+'%';
+  document.querySelectorAll('.pp-cap').forEach(c=>c.classList.toggle('pp-on', c.dataset.cap===penCfg.cap));
+  document.querySelectorAll('#pp-pc .pp-chip').forEach(c=>c.classList.toggle('pp-on', c.dataset.pressure===penCfg.pressure));
+  // 위치 계산
+  positionPenPanel(t);
+  pp.style.display='flex';
+  requestAnimationFrame(()=>{ pp.classList.add('pp-open'); });
+  penPanelOpen=true;
+  updatePPPreview();
+}
+function closePenPanel(){
+  const pp=document.getElementById('pen-panel');
+  pp.classList.remove('pp-open');
+  setTimeout(()=>{ if(!penPanelOpen) pp.style.display='none'; },160);
+  penPanelOpen=false;
+}
+function positionPenPanel(t){
+  if(window.innerWidth<=767) return; // 모바일: CSS로 처리
+  const btn=document.getElementById('t-'+t);
+  if(!btn) return;
+  const br=btn.getBoundingClientRect();
+  const pp=document.getElementById('pen-panel');
+  pp.style.left=(br.right+10)+'px';
+  pp.style.top = Math.min(br.top, window.innerHeight-500)+'px';
+}
+function onPPChange(){
+  penCfg.smooth  = parseInt(document.getElementById('pp-smooth').value);
+  penCfg.opacity = parseInt(document.getElementById('pp-opacity').value);
+  document.getElementById('pp-smooth-v').textContent  = penCfg.smooth;
+  document.getElementById('pp-opacity-v').textContent = penCfg.opacity+'%';
+  // 안정화 preset chips 동기
+  const chips=[...document.querySelectorAll('#pp-sc .pp-chip')];
+  const presets=[0,5,10,18];
+  chips.forEach((c,i)=>c.classList.toggle('pp-on', presets[i]===penCfg.smooth));
+  updatePPPreview();
+}
+function setPPSmooth(v,el){
+  document.querySelectorAll('#pp-sc .pp-chip').forEach(c=>c.classList.remove('pp-on'));
+  el.classList.add('pp-on');
+  penCfg.smooth=v;
+  document.getElementById('pp-smooth').value=v;
+  document.getElementById('pp-smooth-v').textContent=v;
+  updatePPPreview();
+}
+function setPPCap(el){
+  document.querySelectorAll('.pp-cap').forEach(c=>c.classList.remove('pp-on'));
+  el.classList.add('pp-on');
+  penCfg.cap=el.dataset.cap;
+  updatePPPreview();
+}
+function setPPPressure(el){
+  document.querySelectorAll('#pp-pc .pp-chip').forEach(c=>c.classList.remove('pp-on'));
+  el.classList.add('pp-on');
+  penCfg.pressure=el.dataset.pressure;
+  updatePPPreview();
+}
+function updatePPPreview(){
+  const p=document.getElementById('pp-preview-path'); if(!p) return;
+  const demoPts=[{x:10,y:30},{x:30,y:10},{x:50,y:22},{x:70,y:34},{x:90,y:18},{x:110,y:8},{x:130,y:22},{x:150,y:34},{x:170,y:16},{x:192,y:14}];
+  const baseW = (tool==='highlight') ? sw*4 : sw;
+  const col = (tool==='highlight') ? color+'99' : color;
+  const opacity = penCfg.opacity/100;
+  if(penCfg.pressure && penCfg.pressure!=='none'){
+    p.setAttribute('d', buildTaperOutlinePath(demoPts, Math.max(2,baseW), penCfg.pressure));
+    p.setAttribute('fill', col);
+    p.setAttribute('fill-opacity', opacity);
+    p.setAttribute('stroke', 'none');
+    p.removeAttribute('stroke-opacity');
+    p.removeAttribute('stroke-width');
+    p.removeAttribute('stroke-linecap');
+  } else {
+    p.setAttribute('stroke',col);
+    p.setAttribute('stroke-opacity',opacity);
+    p.setAttribute('stroke-linecap',penCfg.cap);
+    p.setAttribute('stroke-linejoin','round');
+    p.setAttribute('stroke-width', Math.max(1,baseW));
+    p.setAttribute('fill','none');
+    p.removeAttribute('fill-opacity');
+    p.setAttribute('d', pts2path(demoPts));
+  }
+}
+
+/* 안정화 적용: 포인트 배열 스무딩 */
+function smoothPts(pts, level){
+  if(level===0||pts.length<3) return pts;
+  const out=[pts[0]];
+  const k=Math.min(level,Math.floor(pts.length/2));
+  for(let i=1;i<pts.length-1;i++){
+    let sx=0,sy=0,cnt=0;
+    for(let j=Math.max(0,i-k);j<=Math.min(pts.length-1,i+k);j++){
+      sx+=pts[j].x; sy+=pts[j].y; cnt++;
+    }
+    out.push({x:sx/cnt,y:sy/cnt});
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+
+function setColor(el){
+  document.querySelectorAll('.cdot').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active'); color=el.dataset.c;
+}
+function setStroke(el,v){
+  document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active'); sw=v;
+}
+
+/* ════════════════════════════════════════════════════════
+   SELECTION
+════════════════════════════════════════════════════════ */
+function select(el, additive=false){
+  if(!additive) deselectAll();
+  if(selectedEls.includes(el)) return;
+  selectedEls.push(el);
+  selected=el;
+  el.classList.add('selected');
+  el.querySelector('.el-handles').style.display='block';
+}
+function deselectAll(){
+  selectedEls.forEach(el=>{
+    el.classList.remove('selected');
+    el.querySelector('.el-handles').style.display='none';
+  });
+  selectedEls=[]; selected=null;
+}
+
+/* ════════════════════════════════════════════════════════
+   LASSO
+════════════════════════════════════════════════════════ */
+function showSelRect(l){
+  const x=Math.min(l.x0,l.x1), y=Math.min(l.y0,l.y1);
+  const w=Math.abs(l.x1-l.x0), h=Math.abs(l.y1-l.y0);
+  selRect.style.cssText=`display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
+}
+function hideSelRect(){ selRect.style.display='none'; }
+function highlightLasso(l){
+  const sx=Math.min(l.x0,l.x1), sy=Math.min(l.y0,l.y1);
+  const ex=Math.max(l.x0,l.x1), ey=Math.max(l.y0,l.y1);
+  board.querySelectorAll('.el').forEach(el=>{
+    const bx=parseFloat(el.style.left), by=parseFloat(el.style.top);
+    const bw=parseFloat(el.style.width), bh=parseFloat(el.style.height);
+    const s2=b2s(bx,by), se=b2s(bx+bw,by+bh);
+    el.classList.toggle('lasso-hover', se.x>sx&&s2.x<ex&&se.y>sy&&s2.y<ey);
+  });
+}
+function finalizeLasso(l){
+  const sx=Math.min(l.x0,l.x1), sy=Math.min(l.y0,l.y1);
+  const ex=Math.max(l.x0,l.x1), ey=Math.max(l.y0,l.y1);
+  deselectAll();
+  if(ex-sx<5 && ey-sy<5) return;
+  board.querySelectorAll('.el').forEach(el=>{
+    el.classList.remove('lasso-hover');
+    const bx=parseFloat(el.style.left), by=parseFloat(el.style.top);
+    const bw=parseFloat(el.style.width), bh=parseFloat(el.style.height);
+    const s2=b2s(bx,by), se=b2s(bx+bw,by+bh);
+    if(se.x>sx&&s2.x<ex&&se.y>sy&&s2.y<ey) select(el,true);
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   WHEEL ZOOM
+════════════════════════════════════════════════════════ */
+vp.addEventListener('wheel',e=>{
+  e.preventDefault(); closeCtx();
+  const f = e.deltaY<0 ? 1.09 : 0.92;
+  const ns = Math.min(8, Math.max(0.08, T.s*f));
+  const r=getVpRect();
+  const lx=e.clientX-r.left, ly=e.clientY-r.top;
+  T.x = lx-(lx-T.x)*(ns/T.s);
+  T.y = ly-(ly-T.y)*(ns/T.s);
+  T.s=ns; applyT();
+},{passive:false});
+
+/* ════════════════════════════════════════════════════════
+   MOUSE — DOWN / MOVE / UP
+════════════════════════════════════════════════════════ */
+vp.addEventListener('mousedown',e=>{
+  if(e.button===2) return;
+  closeCtx();
+  if(e.button===1 || tool==='pan'){
+    panning=true;
+    const r=getVpRect();
+    panOrigin={x:e.clientX-r.left-T.x, y:e.clientY-r.top-T.y};
+    document.body.classList.add('panning');
+    e.preventDefault(); return;
+  }
+  const bp=s2b(e.clientX,e.clientY);
+  if(tool==='pen'||tool==='highlight'){
+    drawing=true; drawPts=[bp];
+    livePth=mkSvg('path');
+    livePth.setAttribute('fill','none');
+    const col = tool==='highlight'?color+'99':color;
+    livePth.setAttribute('stroke', col);
+    livePth.setAttribute('stroke-opacity', penCfg.opacity/100);
+    livePth.setAttribute('stroke-width', tool==='highlight'?sw*4:sw);
+    livePth.setAttribute('stroke-linecap', penCfg.cap||'round');
+    livePth.setAttribute('stroke-linejoin','round');
+    svgl.appendChild(livePth); return;
+  }
+  if(tool==='eraser'){drawing=true; eraseAt(bp); return;}
+  if(tool==='rect'||tool==='circle'||tool==='arrow'){drawing=true; shapeA=bp; return;}
+  if(tool==='text'){ addText(bp); return; }
+  if(tool==='select'){
+    if(!e.target.closest('.el')){
+      deselectAll();
+      lasso={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY};
+      showSelRect(lasso);
+      e.preventDefault();
+    }
+  }
+});
+
+window.addEventListener('mousemove',e=>{
+  if(panning){
+    const r=getVpRect();
+    T.x=e.clientX-r.left-panOrigin.x; T.y=e.clientY-r.top-panOrigin.y; applyT(); return;
+  }
+  if(dragging){
+    const bp=s2b(e.clientX,e.clientY);
+    if(dragging.els){
+      dragging.els.forEach(d=>{ d.el.style.left=(bp.x-d.ox)+'px'; d.el.style.top=(bp.y-d.oy)+'px'; });
+    } else {
+      dragging.el.style.left=(bp.x-dragging.ox)+'px';
+      dragging.el.style.top =(bp.y-dragging.oy)+'px';
+    }
+    updateMinimap(); return;
+  }
+  if(resizing){ doResize(e.clientX,e.clientY); return; }
+  if(lasso){ lasso.x1=e.clientX; lasso.y1=e.clientY; showSelRect(lasso); highlightLasso(lasso); return; }
+  if(!drawing) return;
+  const bp=s2b(e.clientX,e.clientY);
+  if(tool==='pen'||tool==='highlight'){ drawPts.push(bp); if(livePth) livePth.setAttribute('d',pts2path(drawPts)); }
+  if(tool==='eraser') eraseAt(bp);
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA) previewShape(shapeA,bp);
+});
+
+window.addEventListener('mouseup',e=>{
+  document.body.classList.remove('panning');
+  if(panning){ panning=false; return; }
+  if(dragging){ dragging=null; updateMinimap(); return; }
+  if(resizing){ resizing=null; updateMinimap(); return; }
+  if(lasso){ finalizeLasso(lasso); lasso=null; hideSelRect(); return; }
+  if(!drawing) return;
+  drawing=false;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  if(tool==='pen'||tool==='highlight'){
+    commitFreehandStroke(drawPts);
+  }
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA){
+    const bp=s2b(e.clientX,e.clientY);
+    if(Math.abs(bp.x-shapeA.x)>4||Math.abs(bp.y-shapeA.y)>4) finalizeShape(shapeA,bp);
+    shapeA=null;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   CONTEXT MENU
+════════════════════════════════════════════════════════ */
+vp.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const el=e.target.closest('.el');
+  if(el) showCtxMenu(el, e.clientX, e.clientY);
+});
+document.addEventListener('click',()=>closeCtx());
+function showCtxMenu(el,cx,cy){
+  ctxEl=el;
+  const m=document.getElementById('ctx');
+  const mw=150, mh=160;
+  let lx=cx, ly=cy;
+  if(lx+mw>innerWidth)  lx=innerWidth-mw-8;
+  if(ly+mh>innerHeight) ly=cy-mh-8;
+  m.style.left=lx+'px'; m.style.top=ly+'px'; m.style.display='block';
+}
+function closeCtx(){ document.getElementById('ctx').style.display='none'; }
+function ctxDo(a){
+  if(!ctxEl) return; closeCtx();
+  if(a==='del'){
+    const targets=selectedEls.length>0?[...selectedEls]:[ctxEl];
+    targets.forEach(e=>e.remove());
+    selectedEls=[]; selected=null; updateMinimap();
+  }
+  if(a==='dup') duplicateEl(ctxEl);
+  if(a==='front') ctxEl.style.zIndex=++zTop;
+  if(a==='back')  ctxEl.style.zIndex=1;
+}
+
+/* ════════════════════════════════════════════════════════
+   LONG-PRESS (mobile context menu)
+════════════════════════════════════════════════════════ */
+function startLongPress(target,cx,cy){
+  longPressTimer=setTimeout(()=>{
+    const el=target.closest('.el');
+    if(el) showCtxMenu(el, cx, cy);
+  },500);
+}
+function cancelLongPress(){ clearTimeout(longPressTimer); longPressTimer=null; }
+
+/* ════════════════════════════════════════════════════════
+   SVG HELPERS
+════════════════════════════════════════════════════════ */
+function mkSvg(tag){ return document.createElementNS('http://www.w3.org/2000/svg',tag); }
+function setAttrs(el,attrs){ for(const[k,v] of Object.entries(attrs)) el.setAttribute(k,v); }
+function pts2path(pts){
+  if(pts.length<2) return '';
+  let d=`M${pts[0].x},${pts[0].y}`;
+  for(let i=1;i<pts.length;i++){
+    const p=pts[i-1],c=pts[i];
+    d+=` Q${p.x},${p.y} ${(p.x+c.x)/2},${(p.y+c.y)/2}`;
+  }
+  return d;
+}
+function taperMul(t, mode){
+  const min=0.18, edge=0.22;
+  if(mode==='start') return t<edge ? min + (1-min)*(t/edge) : 1;
+  if(mode==='end')   return t>1-edge ? min + (1-min)*((1-t)/edge) : 1;
+  if(mode==='both'){
+    if(t<edge) return min + (1-min)*(t/edge);
+    if(t>1-edge) return min + (1-min)*((1-t)/edge);
+    return 1;
+  }
+  return 1;
+}
+function buildTaperOutlinePath(pts, width, mode){
+  if(pts.length<2) return '';
+  const left=[], right=[];
+  for(let i=0;i<pts.length;i++){
+    const prev=pts[Math.max(0,i-1)], next=pts[Math.min(pts.length-1,i+1)];
+    let dx=next.x-prev.x, dy=next.y-prev.y;
+    const len=Math.hypot(dx,dy)||1;
+    dx/=len; dy/=len;
+    const nx=-dy, ny=dx;
+    const hw=Math.max(0.8, (width*taperMul(i/(pts.length-1), mode))/2);
+    left.push({x:pts[i].x + nx*hw, y:pts[i].y + ny*hw});
+    right.push({x:pts[i].x - nx*hw, y:pts[i].y - ny*hw});
+  }
+  const ring=[...left, ...right.reverse()];
+  let d=`M${ring[0].x},${ring[0].y}`;
+  for(let i=1;i<ring.length;i++) d+=` L${ring[i].x},${ring[i].y}`;
+  d+=' Z';
+  return d;
+}
+function buildFreehandStrokeSpec(pts){
+  const baseW = (tool==='highlight') ? sw*4 : sw;
+  const col = (tool==='highlight') ? color+'99' : color;
+  const opacity = penCfg.opacity/100;
+  const cap = penCfg.cap||'round';
+  if(penCfg.pressure && penCfg.pressure!=='none'){
+    return {
+      kind:'taper-path',
+      attrs:{d:buildTaperOutlinePath(pts, Math.max(1,baseW), penCfg.pressure), fill:col, 'fill-opacity':opacity, stroke:'none'}
+    };
+  }
+  return {
+    kind:'path',
+    attrs:{d:pts2path(pts), stroke:col, 'stroke-opacity':opacity, 'stroke-width':baseW, fill:'none', 'stroke-linecap':cap, 'stroke-linejoin':'round'}
+  };
+}
+function commitFreehandStroke(pts){
+  if(pts.length<=1){ if(livePth && livePth.parentNode) svgl.removeChild(livePth); livePth=null; drawPts=[]; return; }
+  const smoothed = smoothPts(pts, penCfg.smooth);
+  const spec = buildFreehandStrokeSpec(smoothed);
+  let finalEl = livePth;
+  if(spec.kind==='taper-path'){
+    if(finalEl && finalEl.parentNode) svgl.removeChild(finalEl);
+    finalEl = mkSvg('path');
+    setAttrs(finalEl, spec.attrs);
+    svgl.appendChild(finalEl);
+  } else {
+    finalEl && setAttrs(finalEl, spec.attrs);
+  }
+  strokes.push({kind:spec.kind, attrs:spec.attrs, svgEl:finalEl});
+  livePth=null; drawPts=[];
+}
+
+function previewShape(a,b){
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  const cr=pCvs.getBoundingClientRect();
+  const sa=b2s(a.x,a.y), sb=b2s(b.x,b.y);
+  const ssa={x:sa.x-cr.left, y:sa.y-cr.top};
+  const ssb={x:sb.x-cr.left, y:sb.y-cr.top};
+  pCtx.save();
+  pCtx.strokeStyle=color; pCtx.lineWidth=sw*T.s; pCtx.lineCap='round'; pCtx.lineJoin='round';
+  if(tool==='rect') pCtx.strokeRect(ssa.x,ssa.y,ssb.x-ssa.x,ssb.y-ssa.y);
+  if(tool==='circle'){
+    const rx=(ssb.x-ssa.x)/2,ry=(ssb.y-ssa.y)/2;
+    pCtx.beginPath(); pCtx.ellipse(ssa.x+rx,ssa.y+ry,Math.abs(rx),Math.abs(ry),0,0,Math.PI*2); pCtx.stroke();
+  }
+  if(tool==='arrow'){
+    pCtx.beginPath(); pCtx.moveTo(ssa.x,ssa.y); pCtx.lineTo(ssb.x,ssb.y); pCtx.stroke();
+    const ang=Math.atan2(ssb.y-ssa.y,ssb.x-ssa.x), hl=(12+sw*2)*T.s;
+    pCtx.beginPath();
+    pCtx.moveTo(ssb.x,ssb.y); pCtx.lineTo(ssb.x-hl*Math.cos(ang-.45),ssb.y-hl*Math.sin(ang-.45));
+    pCtx.moveTo(ssb.x,ssb.y); pCtx.lineTo(ssb.x-hl*Math.cos(ang+.45),ssb.y-hl*Math.sin(ang+.45));
+    pCtx.stroke();
+  }
+  pCtx.restore();
+}
+
+function finalizeShape(a,b){
+  if(tool==='rect'){
+    const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
+    const el=mkSvg('rect');
+    const attrs={x,y,width:w,height:h,fill:'none',stroke:color,'stroke-width':sw,'stroke-linecap':'round'};
+    setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind:'rect',attrs,svgEl:el});
+  }
+  if(tool==='circle'){
+    const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2,rx=Math.abs(b.x-a.x)/2,ry=Math.abs(b.y-a.y)/2;
+    const el=mkSvg('ellipse');
+    const attrs={cx,cy,rx,ry,fill:'none',stroke:color,'stroke-width':sw};
+    setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind:'ellipse',attrs,svgEl:el});
+  }
+  if(tool==='arrow'){
+    const g=mkSvg('g'), line=mkSvg('line');
+    setAttrs(line,{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':sw,'stroke-linecap':'round'});
+    const ang=Math.atan2(b.y-a.y,b.x-a.x),hl=12+sw*2;
+    const d=`M${b.x},${b.y} L${b.x-hl*Math.cos(ang-.45)},${b.y-hl*Math.sin(ang-.45)} M${b.x},${b.y} L${b.x-hl*Math.cos(ang+.45)},${b.y-hl*Math.sin(ang+.45)}`;
+    const path=mkSvg('path');
+    setAttrs(path,{d,stroke:color,'stroke-width':sw,'stroke-linecap':'round',fill:'none'});
+    g.appendChild(line); g.appendChild(path); svgl.appendChild(g);
+    strokes.push({kind:'arrow',svgEl:g,attrs:{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':sw,hl,d}});
+  }
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   ERASER
+════════════════════════════════════════════════════════ */
+function eraseAt(bp){
+  const r=18/T.s;
+  for(let i=strokes.length-1;i>=0;i--){
+    try{
+      const bb=strokes[i].svgEl.getBBox();
+      if(bp.x>=bb.x-r&&bp.x<=bb.x+bb.width+r&&bp.y>=bb.y-r&&bp.y<=bb.y+bb.height+r){
+        svgl.removeChild(strokes[i].svgEl); strokes.splice(i,1);
+      }
+    }catch(e){}
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   ELEMENT SYSTEM
+════════════════════════════════════════════════════════ */
+function makeEl(x,y,w,h){
+  const el=document.createElement('div');
+  el.className='el';
+  el.style.cssText=`left:${x}px;top:${y}px;width:${w}px;height:${h}px;z-index:${++zTop};`;
+  return el;
+}
+
+function addHandles(el){
+  const hc=document.createElement('div');
+  hc.className='el-handles';
+
+  const mv=document.createElement('div'); mv.className='h-move';
+  function startMove(cx,cy){
+    if(tool!=='select') return;
+    if(!selectedEls.includes(el)){ deselectAll(); select(el); }
+    el.style.zIndex=++zTop;
+    const bp=s2b(cx,cy);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+  }
+  mv.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.stopPropagation(); e.preventDefault(); startMove(e.clientX,e.clientY); });
+  mv.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; e.stopPropagation(); e.preventDefault(); startMove(e.touches[0].clientX,e.touches[0].clientY); cancelLongPress(); },{passive:false});
+  hc.appendChild(mv);
+
+  ['nw','n','ne','e','se','s','sw','w'].forEach(dir=>{
+    const rh=document.createElement('div'); rh.className=`h-resize ${dir}`;
+    function startResize(cx,cy){
+      const r0={x:parseFloat(el.style.left),y:parseFloat(el.style.top),w:parseFloat(el.style.width),h:parseFloat(el.style.height)};
+      resizing={el,dir,r0,m0:s2b(cx,cy)};
+    }
+    rh.addEventListener('mousedown',e=>{ e.stopPropagation(); e.preventDefault(); startResize(e.clientX,e.clientY); });
+    rh.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; e.stopPropagation(); e.preventDefault(); startResize(e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
+    hc.appendChild(rh);
+  });
+  el.appendChild(hc);
+}
+
+function doResize(cx,cy){
+  if(!resizing) return;
+  const {el,dir,r0,m0}=resizing;
+  const cur=s2b(cx,cy), dx=cur.x-m0.x, dy=cur.y-m0.y;
+  let {x,y,w,h}=r0;
+  const MW=60,MH=40;
+  if(dir.includes('e')){w=Math.max(MW,r0.w+dx);}
+  if(dir.includes('s')){h=Math.max(MH,r0.h+dy);}
+  if(dir.includes('w')){ const nw=Math.max(MW,r0.w-dx); x=r0.x+r0.w-nw; w=nw; }
+  if(dir.includes('n')){ const nh=Math.max(MH,r0.h-dy); y=r0.y+r0.h-nh; h=nh; }
+  el.style.left=x+'px'; el.style.top=y+'px'; el.style.width=w+'px'; el.style.height=h+'px';
+}
+
+function attachSelectClick(el){
+  el.addEventListener('mousedown',e=>{
+    if(tool!=='select') return;
+    e.stopPropagation();
+    const add=e.shiftKey||e.metaKey||e.ctrlKey;
+    if(!add && !selectedEls.includes(el)) deselectAll();
+    select(el, add || selectedEls.includes(el));
+    el.style.zIndex=++zTop;
+    const bp=s2b(e.clientX,e.clientY);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+    e.preventDefault();
+  });
+  el.addEventListener('touchstart',e=>{
+    if(tool!=='select'||e.touches.length!==1) return;
+    e.stopPropagation();
+    const t=e.touches[0];
+    startLongPress(e.target, t.clientX, t.clientY);
+    if(!selectedEls.includes(el)) deselectAll();
+    select(el,false);
+    el.style.zIndex=++zTop;
+    const bp=s2b(t.clientX,t.clientY);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+    e.preventDefault();
+  },{passive:false});
+}
+
+/* ════════════════════════════════════════════════════════
+   TOUCH EVENTS (global — pan / draw / lasso)
+════════════════════════════════════════════════════════ */
+vp.addEventListener('touchstart',e=>{
+  cancelLongPress();
+  if(e.touches.length===2) return; // pinch handled separately
+  if(e.touches.length!==1) return;
+  const t=e.touches[0];
+  closeCtx();
+
+  if(tool==='pan'){
+    const r=getVpRect();
+    touchPanOrigin={x:t.clientX-r.left-T.x, y:t.clientY-r.top-T.y};
+    document.body.classList.add('panning');
+    e.preventDefault(); return;
+  }
+  const bp=s2b(t.clientX,t.clientY);
+  if(tool==='pen'||tool==='highlight'){
+    drawing=true; drawPts=[bp];
+    livePth=mkSvg('path');
+    livePth.setAttribute('fill','none');
+    livePth.setAttribute('stroke',tool==='highlight'?color+'99':color);
+    livePth.setAttribute('stroke-opacity', penCfg.opacity/100);
+    livePth.setAttribute('stroke-width',tool==='highlight'?sw*4:sw);
+    livePth.setAttribute('stroke-linecap', penCfg.cap||'round');
+    livePth.setAttribute('stroke-linejoin','round');
+    svgl.appendChild(livePth); e.preventDefault(); return;
+  }
+  if(tool==='eraser'){ drawing=true; eraseAt(bp); e.preventDefault(); return; }
+  if(tool==='rect'||tool==='circle'||tool==='arrow'){ drawing=true; shapeA=bp; e.preventDefault(); return; }
+  if(tool==='text'){ addText(bp); e.preventDefault(); return; }
+  if(tool==='select'){
+    if(!e.target.closest('.el')){
+      deselectAll();
+      touchLasso={x0:t.clientX,y0:t.clientY,x1:t.clientX,y1:t.clientY};
+      startLongPress(e.target, t.clientX, t.clientY);
+      showSelRect(touchLasso);
+      e.preventDefault();
+    }
+  }
+},{passive:false});
+
+window.addEventListener('touchmove',e=>{
+  if(e.touches.length===2) return;
+  if(e.touches.length!==1) return;
+  cancelLongPress();
+  const t=e.touches[0];
+  if(touchPanOrigin){
+    const r=getVpRect();
+    T.x=t.clientX-r.left-touchPanOrigin.x; T.y=t.clientY-r.top-touchPanOrigin.y; applyT(); e.preventDefault(); return;
+  }
+  if(dragging){
+    const bp=s2b(t.clientX,t.clientY);
+    if(dragging.els){ dragging.els.forEach(d=>{ d.el.style.left=(bp.x-d.ox)+'px'; d.el.style.top=(bp.y-d.oy)+'px'; }); }
+    else { dragging.el.style.left=(bp.x-dragging.ox)+'px'; dragging.el.style.top=(bp.y-dragging.oy)+'px'; }
+    updateMinimap(); e.preventDefault(); return;
+  }
+  if(resizing){ doResize(t.clientX,t.clientY); updateMinimap(); e.preventDefault(); return; }
+  if(touchLasso){ touchLasso.x1=t.clientX; touchLasso.y1=t.clientY; showSelRect(touchLasso); highlightLasso(touchLasso); e.preventDefault(); return; }
+  if(!drawing) return;
+  e.preventDefault();
+  const bp=s2b(t.clientX,t.clientY);
+  if(tool==='pen'||tool==='highlight'){ drawPts.push(bp); if(livePth) livePth.setAttribute('d',pts2path(drawPts)); }
+  if(tool==='eraser') eraseAt(bp);
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA) previewShape(shapeA,bp);
+},{passive:false});
+
+window.addEventListener('touchend',e=>{
+  cancelLongPress();
+  document.body.classList.remove('panning');
+  if(touchPanOrigin){ touchPanOrigin=null; return; }
+  if(dragging){ dragging=null; updateMinimap(); return; }
+  if(resizing){ resizing=null; updateMinimap(); return; }
+  if(touchLasso){ finalizeLasso(touchLasso); touchLasso=null; hideSelRect(); return; }
+  if(!drawing) return;
+  drawing=false;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  const lastT=e.changedTouches[0];
+  if(tool==='pen'||tool==='highlight'){
+    commitFreehandStroke(drawPts);
+  }
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA){
+    const bp=s2b(lastT.clientX,lastT.clientY);
+    if(Math.abs(bp.x-shapeA.x)>4||Math.abs(bp.y-shapeA.y)>4) finalizeShape(shapeA,bp);
+    shapeA=null;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   PINCH ZOOM
+════════════════════════════════════════════════════════ */
+let ltDist=null;
+vp.addEventListener('touchstart',e=>{
+  if(e.touches.length===2)
+    ltDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+},{passive:true});
+vp.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    if(ltDist){
+      const ns=Math.min(8,Math.max(0.08,T.s*(d/ltDist)));
+      const r=getVpRect();
+      const mx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
+      const my=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+      T.x=mx-(mx-T.x)*(ns/T.s); T.y=my-(my-T.y)*(ns/T.s); T.s=ns; applyT();
+    }
+    ltDist=d;
+  }
+},{passive:false});
+
+/* ════════════════════════════════════════════════════════
+   STICKY
+════════════════════════════════════════════════════════ */
+const SC=['#fff9c4','#fce4ec','#e3f2fd','#e8f5e9','#f3e5f5','#fff3e0'];
+let sci=0;
+function addSticky(opts={}){
+  const r=getVpRect();
+  const c=s2b(r.left+vp.offsetWidth/2,r.top+vp.offsetHeight/2);
+  const x=opts.x??c.x-100, y=opts.y??c.y-80;
+  const w=opts.w??200, h=opts.h??170;
+  const bg=opts.bg??SC[sci++%SC.length];
+  const el=makeEl(x,y,w,h);
+  el.dataset.kind='sticky';
+  const body=document.createElement('div');
+  body.className='el-body sticky-body';
+  body.style.background=bg;
+  body.innerHTML=`<div class="sticky-bar">
+    <button class="sticky-btn" onclick="cycleStickyBg(this.closest('.el'))">◐</button>
+    <button class="sticky-btn" onclick="this.closest('.el').remove();updateMinimap()">✕</button>
+  </div><textarea placeholder="메모...">${opts.text??''}</textarea>`;
+  const ta=body.querySelector('textarea');
+  ta.addEventListener('mousedown',e=>e.stopPropagation());
+  ta.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  el.appendChild(body);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el);
+  if(!opts.x) setTimeout(()=>ta.focus(),50);
+  updateMinimap(); return el;
+}
+function cycleStickyBg(el){
+  const b=el.querySelector('.sticky-body');
+  b.style.background=SC[(SC.indexOf(b.style.background)+1)%SC.length];
+}
+
+const RECENT_KEY='infinity_canvas_recent_v1';
+let startupDragging=null;
+
+function bindWindowContentGuards(root){
+  root.addEventListener('mousedown',e=>e.stopPropagation());
+  root.addEventListener('click',e=>e.stopPropagation());
+  root.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+}
+function beginStartupDrag(el,cx,cy){
+  const bp=s2b(cx,cy);
+  startupDragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+  el.style.zIndex=++zTop;
+}
+window.addEventListener('mousemove',e=>{
+  if(!startupDragging) return;
+  const bp=s2b(e.clientX,e.clientY);
+  startupDragging.el.style.left=(bp.x-startupDragging.ox)+'px';
+  startupDragging.el.style.top=(bp.y-startupDragging.oy)+'px';
+});
+window.addEventListener('mouseup',()=>{ startupDragging=null; });
+window.addEventListener('touchmove',e=>{
+  if(!startupDragging || e.touches.length!==1) return;
+  const bp=s2b(e.touches[0].clientX,e.touches[0].clientY);
+  startupDragging.el.style.left=(bp.x-startupDragging.ox)+'px';
+  startupDragging.el.style.top=(bp.y-startupDragging.oy)+'px';
+  e.preventDefault();
+},{passive:false});
+window.addEventListener('touchend',()=>{ startupDragging=null; });
+
+function addStartupWindow(opts={}){
+  const r=getVpRect();
+  const c=s2b(r.left+vp.offsetWidth/2,r.top+vp.offsetHeight/2);
+  const x=opts.x??c.x-120, y=opts.y??c.y-90;
+  const el=document.createElement('div');
+  el.className='start-window';
+  el.dataset.winType=opts.type||'panel';
+  el.style.cssText=`left:${x}px;top:${y}px;width:${opts.w??280}px;height:${opts.h??220}px;z-index:${++zTop};`;
+
+  const body=document.createElement('div');
+  body.className='start-window-body';
+  const head=document.createElement('div');
+  head.className='start-window-header';
+  head.innerHTML=`<div class="start-window-title">${opts.title??'창'}</div><button type="button" class="start-window-close">✕</button>`;
+  const content=document.createElement('div');
+  content.className='start-window-content';
+  bindWindowContentGuards(content);
+  const closeBtn=head.querySelector('.start-window-close');
+  closeBtn.addEventListener('click',e=>{ e.stopPropagation(); el.remove(); });
+  closeBtn.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  head.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.preventDefault(); e.stopPropagation(); beginStartupDrag(el,e.clientX,e.clientY); });
+  head.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; e.preventDefault(); e.stopPropagation(); beginStartupDrag(el,e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
+  body.appendChild(head);
+  body.appendChild(content);
+  el.appendChild(body);
+  board.appendChild(el);
+  if(typeof opts.render==='function') opts.render(content,el);
+  return el;
+}
+
+function loadRecentBoards(){
+  try{
+    const items=JSON.parse(localStorage.getItem(RECENT_KEY)||'[]');
+    return Array.isArray(items)?items:[];
+  }catch(e){ return []; }
+}
+function saveRecentBoards(list){
+  const trimmed=[...list].slice(0,8);
+  try{ localStorage.setItem(RECENT_KEY, JSON.stringify(trimmed)); return true; }catch(e){}
+  while(trimmed.length){
+    trimmed.pop();
+    try{ localStorage.setItem(RECENT_KEY, JSON.stringify(trimmed)); return true; }catch(e){}
+  }
+  return false;
+}
+function formatRecentStamp(iso){
+  try{
+    return new Date(iso).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(e){ return ''; }
+}
+function escapeHtml(s=''){
+  return String(s)
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#39;');
+}
+function rememberRecentBoard(data,label,origin='saved'){
+  const items=loadRecentBoards().filter(item=>item && item.label!==label);
+  items.unshift({
+    id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    label, origin, savedAt:new Date().toISOString(), data
+  });
+  saveRecentBoards(items);
+  renderRecentBoards();
+}
+function removeRecentBoard(id){
+  saveRecentBoards(loadRecentBoards().filter(item=>item.id!==id));
+  renderRecentBoards();
+}
+function openRecentBoard(id){
+  const item=loadRecentBoards().find(x=>x.id===id);
+  if(!item) return;
+  restoreBoard(item.data);
+  showSnack(`📂 최근 보드 열기: ${item.label}`);
+}
+function renderRecentBoards(){
+  const listEl=document.getElementById('recent-board-list');
+  if(!listEl) return;
+  const items=loadRecentBoards();
+  if(!items.length){
+    listEl.innerHTML='<div class="recent-empty">아직 최근 보드가 없습니다.<br>저장하거나 불러온 보드가 이곳에 표시됩니다.</div>';
+    return;
+  }
+  listEl.innerHTML='';
+  items.forEach(item=>{
+    const row=document.createElement('div');
+    row.className='recent-item';
+    row.innerHTML=`
+      <div class="recent-main">
+        <div class="recent-name">${escapeHtml(item.label||'최근 보드')}</div>
+        <div class="recent-meta">${escapeHtml(formatRecentStamp(item.savedAt))}</div>
+      </div>
+      <div class="recent-actions">
+        <button type="button" class="launch-btn small primary">열기</button>
+        <button type="button" class="launch-btn small ghost">삭제</button>
+      </div>`;
+    const [openBtn, delBtn]=row.querySelectorAll('button');
+    openBtn.addEventListener('click',()=>openRecentBoard(item.id));
+    delBtn.addEventListener('click',()=>removeRecentBoard(item.id));
+    listEl.appendChild(row);
+  });
+}
+function clearStartupWindows(){
+  board.querySelectorAll('.start-window').forEach(el=>el.remove());
+}
+function ensureStartupWindows(){
+  clearStartupWindows();
+  createLauncherWindow();
+  createRecentBoardsWindow();
+  createShortcutsWindow();
+}
+function hasBoardContent(){
+  return strokes.length>0 || board.querySelectorAll('.el').length>0;
+}
+function createFreshBoard(){
+  if(hasBoardContent() && !confirm('새 캔버스를 시작할까요? 현재 보드 내용은 화면에서 지워집니다.')) return;
+  clearBoardContents();
+  clearStartupWindows();
+  resetView();
+  showSnack('🆕 새 캔버스를 시작했습니다');
+}
+function createLauncherWindow(){
+  return addStartupWindow({
+    type:'launcher', title:'시작 패널', x:-240, y:-118, w:290, h:214,
+    render(content){
+      content.innerHTML=`
+        <div class="start-window-note">새 보드를 시작하거나 저장한 캔버스 JSON 파일을 바로 불러올 수 있습니다.</div>
+        <div class="start-window-actions">
+          <button type="button" class="launch-btn primary" id="launcher-new-btn">새 캔버스</button>
+          <button type="button" class="launch-btn" id="launcher-load-btn">캔버스 불러오기</button>
+        </div>
+        <div class="recent-meta">창 상단을 드래그하면 이동되고, ✕ 버튼으로 닫을 수 있습니다.</div>`;
+      content.querySelector('#launcher-new-btn').addEventListener('click',createFreshBoard);
+      content.querySelector('#launcher-load-btn').addEventListener('click',()=>document.getElementById('load-in').click());
+    }
+  });
+}
+function createRecentBoardsWindow(){
+  return addStartupWindow({
+    type:'recent', title:'최근 보드', x:72, y:-118, w:320, h:270,
+    render(content){
+      content.innerHTML=`
+        <div class="start-window-note">이 브라우저에서 저장하거나 불러온 최근 보드가 여기에 표시됩니다.</div>
+        <div class="recent-toolbar">
+          <button type="button" class="launch-btn small" id="recent-save-btn">현재 캔버스 저장</button>
+        </div>
+        <div class="recent-list" id="recent-board-list"></div>`;
+      content.querySelector('#recent-save-btn').addEventListener('click',saveBoard);
+      renderRecentBoards();
+    }
+  });
+}
+function createShortcutsWindow(){
+  return addStartupWindow({
+    type:'shortcuts', title:'단축키 요약', x:418, y:-118, w:292, h:304,
+    render(content){
+      const rows=[
+        ['V','선택 도구'],['H','화면 이동'],['P','펜'],['L','형광펜'],['E','지우개'],
+        ['S','포스트잇 추가'],['T','텍스트'],['R','사각형'],['C','원'],['A','화살표'],
+        ['G','그리드 토글'],['Esc','선택 해제'],['Del','선택 삭제'],['Ctrl+S','저장'],['Ctrl+D','복제']
+      ];
+      content.innerHTML=`
+        <div class="start-window-note">자주 쓰는 키를 빠르게 확인할 수 있는 요약 창입니다.</div>
+        <div class="shortcut-list">${rows.map(([key,desc])=>`<div class="shortcut-row"><div class="shortcut-key">${key}</div><div class="shortcut-desc">${desc}</div></div>`).join('')}</div>`;
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   TEXT
+════════════════════════════════════════════════════════ */
+function addText(bp,opts={}){
+  const x=opts.x??bp.x, y=opts.y??bp.y;
+  const el=makeEl(x,y,opts.w??200,opts.h??50);
+  el.dataset.kind='text';
+  const body=document.createElement('div');
+  body.className='el-body text-body';
+  body.contentEditable=true; body.spellcheck=false;
+  body.style.color=opts.color??color;
+  body.style.fontSize=(opts.fontSize??Math.max(12,Math.round(22/T.s)))+'px';
+  body.textContent=opts.text??'';
+  body.addEventListener('mousedown',e=>e.stopPropagation());
+  body.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  body.addEventListener('blur',()=>{ if(!body.textContent.trim()&&!opts.text){el.remove();return;} updateMinimap(); });
+  el.appendChild(body);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el);
+  setTimeout(()=>{ body.focus(); placeCursorAtEnd(body); setTool('select'); },50);
+  updateMinimap(); return el;
+}
+function placeCursorAtEnd(el){
+  const r=document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ════════════════════════════════════════════════════════
+   IMAGE
+════════════════════════════════════════════════════════ */
+function addImage(src,opts={}){
+  const r=getVpRect();
+  const c=s2b(r.left+vp.offsetWidth/2,r.top+vp.offsetHeight/2);
+  const el=makeEl(opts.x??c.x-150, opts.y??c.y-100, opts.w??320, opts.h??240);
+  el.dataset.kind='image';
+  const img=document.createElement('img');
+  img.className='el-body image-body'; img.src=src;
+  el.appendChild(img);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el); updateMinimap(); return el;
+}
+function handleImg(evt){
+  const f=evt.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{ addImage(e.target.result); showSnack('이미지 추가됨'); };
+  r.readAsDataURL(f); evt.target.value='';
+}
+
+/* ════════════════════════════════════════════════════════
+   DUPLICATE
+════════════════════════════════════════════════════════ */
+function duplicateEl(el){
+  const kind=el.dataset.kind;
+  const x=parseFloat(el.style.left)+20, y=parseFloat(el.style.top)+20;
+  const w=parseFloat(el.style.width), h=parseFloat(el.style.height);
+  if(kind==='sticky'){ addSticky({x,y,w,h,bg:el.querySelector('.sticky-body').style.background,text:el.querySelector('textarea').value}); }
+  else if(kind==='text'){ const b=el.querySelector('.text-body'); addText({},{x,y,w,h,text:b.textContent,color:b.style.color,fontSize:parseFloat(b.style.fontSize)}); }
+  else if(kind==='image'){ addImage(el.querySelector('img').src,{x,y,w,h}); }
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   KEYBOARD
+════════════════════════════════════════════════════════ */
+document.addEventListener('keydown',e=>{
+  const ae=document.activeElement;
+  if(ae?.tagName==='TEXTAREA'||ae?.isContentEditable) return;
+  const map={v:'select',h:'pan',p:'pen',l:'highlight',e:'eraser',r:'rect',c:'circle',a:'arrow',t:'text'};
+  if(map[e.key]){ setTool(map[e.key]); return; }
+  if(e.key==='s'&&!e.ctrlKey&&!e.metaKey){ addSticky(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){ e.preventDefault(); saveBoard(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='d'){ e.preventDefault(); (selectedEls.length?[...selectedEls]:(selected?[selected]:[])).forEach(duplicateEl); return; }
+  if(e.key==='Delete'||e.key==='Backspace'){ (selectedEls.length?[...selectedEls]:(selected?[selected]:[])).forEach(el=>el.remove()); selectedEls=[]; selected=null; updateMinimap(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='a'){ e.preventDefault(); deselectAll(); board.querySelectorAll('.el').forEach(el=>select(el,true)); return; }
+  if(e.key==='Escape'){ deselectAll(); return; }
+  if(e.key==='='||e.key==='+'){ T.s=Math.min(8,T.s*1.1); applyT(); }
+  if(e.key==='-'){ T.s=Math.max(0.08,T.s*0.9); applyT(); }
+  if(e.key==='0') resetView();
+  if(e.key==='g') toggleGrid();
+});
+
+/* ════════════════════════════════════════════════════════
+   MINIMAP
+════════════════════════════════════════════════════════ */
+function updateMinimap(){
+  if(isMobile()) return;
+  mmCtx.clearRect(0,0,130,84);
+  mmCtx.fillStyle='#e8e4dc'; mmCtx.fillRect(0,0,130,84);
+  const W=6000,H=6000,ox=W/2,oy=H/2,sx=130/W,sy=84/H;
+  board.querySelectorAll('.el').forEach(el=>{
+    const x=parseFloat(el.style.left)||0, y=parseFloat(el.style.top)||0;
+    const w=parseFloat(el.style.width)||60, h=parseFloat(el.style.height)||40;
+    const k=el.dataset.kind;
+    mmCtx.fillStyle=k==='sticky'?'#f0e040':k==='image'?'#aac4ee':'#b0c4b0';
+    mmCtx.fillRect((x+ox)*sx,(y+oy)*sy,w*sx,h*sy);
+  });
+  const vpW=vp.offsetWidth/T.s, vpH=vp.offsetHeight/T.s;
+  const vpX=-T.x/T.s, vpY=-T.y/T.s;
+  mmCtx.strokeStyle='#c84b2f'; mmCtx.lineWidth=1.5;
+  mmCtx.strokeRect((vpX+ox)*sx,(vpY+oy)*sy,vpW*sx,vpH*sy);
+}
+
+/* ════════════════════════════════════════════════════════
+   PASTE
+════════════════════════════════════════════════════════ */
+document.addEventListener('paste',e=>{
+  const items=e.clipboardData?.items; if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      const r=new FileReader();
+      r.onload=ev=>{ addImage(ev.target.result); showSnack('이미지 붙여넣기 완료'); };
+      r.readAsDataURL(item.getAsFile());
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   SAVE / LOAD
+════════════════════════════════════════════════════════ */
+function getStrokeAttrs(s){
+  const a={};
+  const keys=['d','stroke','stroke-opacity','stroke-width','fill','fill-opacity','x','y','width','height','cx','cy','rx','ry','x1','y1','x2','y2','stroke-linecap','stroke-linejoin'];
+  if(s.svgEl.getAttribute) keys.forEach(k=>{const v=s.svgEl.getAttribute(k);if(v!=null)a[k]=v;});
+  if(s.kind==='arrow'){
+    const ln=s.svgEl.querySelector('line'), pt=s.svgEl.querySelector('path');
+    if(ln){a.x1=ln.getAttribute('x1');a.y1=ln.getAttribute('y1');a.x2=ln.getAttribute('x2');a.y2=ln.getAttribute('y2');a.stroke=ln.getAttribute('stroke');a['stroke-width']=ln.getAttribute('stroke-width');}
+    if(pt) a.d=pt.getAttribute('d');
+  }
+  return a;
+}
+function getBoardData(){
+  const data={version:3,transform:T,strokes:strokes.map(s=>({kind:s.kind,attrs:getStrokeAttrs(s)})),elements:[]};
+  board.querySelectorAll('.el').forEach(el=>{
+    const kind=el.dataset.kind;
+    const rec={kind,x:parseFloat(el.style.left),y:parseFloat(el.style.top),w:parseFloat(el.style.width),h:parseFloat(el.style.height),z:parseInt(el.style.zIndex)||10};
+    if(kind==='sticky'){rec.bg=el.querySelector('.sticky-body').style.background;rec.text=el.querySelector('textarea').value;}
+    else if(kind==='text'){const b=el.querySelector('.text-body');rec.text=b.textContent;rec.color=b.style.color;rec.fontSize=parseFloat(b.style.fontSize);}
+    else if(kind==='image') rec.src=el.querySelector('img').src;
+    data.elements.push(rec);
+  });
+  return data;
+}
+function saveBoard(){
+  const data=getBoardData();
+  const fileName='canvas-'+new Date().toISOString().slice(0,10)+'.json';
+  rememberRecentBoard(data, '저장 · '+fileName, 'saved');
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 1000);
+  showSnack('💾 저장 완료!');
+}
+function loadBoard(evt){
+  const f=evt.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      restoreBoard(data);
+      rememberRecentBoard(data, '불러오기 · '+(f.name||'로컬 파일'), 'loaded');
+      showSnack('📂 불러오기 완료!');
+    }catch(err){
+      showSnack('❌ 파일을 읽을 수 없습니다');
+    }
+  };
+  r.readAsText(f); evt.target.value='';
+}
+function clearBoardContents(){
+  board.querySelectorAll('.el').forEach(e=>e.remove());
+  strokes.forEach(s=>{try{svgl.removeChild(s.svgEl);}catch(e){}});
+  strokes=[]; selected=null; selectedEls=[]; dragging=null; resizing=null;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  updateMinimap();
+}
+function restoreBoard(data){
+  clearBoardContents();
+  if(data.transform){T=data.transform;applyT();}
+  else { applyT(); }
+  (data.strokes||[]).forEach(s=>{
+    const{kind,attrs}=s;
+    if(kind==='path' || kind==='taper-path'){ const el=mkSvg('path'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='rect'){ const el=mkSvg('rect'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='ellipse'){ const el=mkSvg('ellipse'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='arrow'){
+      const g=mkSvg('g'),ln=mkSvg('line'); setAttrs(ln,{x1:attrs.x1,y1:attrs.y1,x2:attrs.x2,y2:attrs.y2,stroke:attrs.stroke,'stroke-width':attrs['stroke-width'],'stroke-linecap':'round'});
+      const pt=mkSvg('path'); setAttrs(pt,{d:attrs.d,stroke:attrs.stroke,'stroke-width':attrs['stroke-width'],'stroke-linecap':'round',fill:'none'});
+      g.appendChild(ln); g.appendChild(pt); svgl.appendChild(g); strokes.push({kind,attrs,svgEl:g});
+    }
+  });
+  (data.elements||[]).forEach(d=>{
+    let el;
+    if(d.kind==='sticky') el=addSticky({x:d.x,y:d.y,w:d.w,h:d.h,bg:d.bg,text:d.text});
+    else if(d.kind==='text') el=addText({},{x:d.x,y:d.y,w:d.w,h:d.h,text:d.text,color:d.color,fontSize:d.fontSize});
+    else if(d.kind==='image') el=addImage(d.src,{x:d.x,y:d.y,w:d.w,h:d.h});
+    if(el&&d.z) el.style.zIndex=d.z;
+  });
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   SNACK
+════════════════════════════════════════════════════════ */
+let snackT;
+function showSnack(msg){
+  const s=document.getElementById('snack');
+  s.textContent=msg; s.classList.add('show');
+  clearTimeout(snackT); snackT=setTimeout(()=>s.classList.remove('show'),2200);
+}
+
+/* ════════════════════════════════════════════════════════
+   CLEAR
+════════════════════════════════════════════════════════ */
+function clearAll(){
+  if(!confirm('모든 내용을 삭제할까요?')) return;
+  clearBoardContents();
+  ensureStartupWindows();
+  showSnack('보드 초기화 완료');
+}
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+// First sync (before adding startup content so positions are correct)
+syncLayout();
+applyT();
+
+ensureStartupWindows();
+
+showSnack('∞ Canvas 준비 완료 ✦');
+</script>
+</body>
+</html>
