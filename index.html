@@ -479,8 +479,20 @@ function applyT(){
   document.getElementById('zoom-pill').textContent = Math.round(T.s*100)+'%';
   updateGrid(); updateMinimap();
 }
-function s2b(sx,sy){ return {x:(sx-T.x)/T.s, y:(sy-T.y)/T.s}; }
-function b2s(bx,by){ return {x:bx*T.s+T.x,   y:by*T.s+T.y}; }
+function s2b(sx, sy){
+  const rect = vp.getBoundingClientRect();
+  return {
+    x: (sx - rect.left - T.x) / T.s,
+    y: (sy - rect.top  - T.y) / T.s
+  };
+}
+function b2s(bx, by){
+  const rect = vp.getBoundingClientRect();
+  return {
+    x: bx * T.s + T.x + rect.left,
+    y: by * T.s + T.y + rect.top
+  };
+}
 function resetView(){ T={x:0,y:0,s:1}; applyT(); }
 
 function updateGrid(){
