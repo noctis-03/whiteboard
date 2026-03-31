@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════
 //  keyboard.js — 키보드 단축키
 //
-//  ADD: D키 → 편집(edit) 도구
+//  UPDATE: Ctrl+Z → undo, Ctrl+Shift+Z / Ctrl+Y → redo
+//          Delete/Backspace 삭제 후 pushState()
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -11,6 +12,7 @@ import { addSticky } from './sticky.js';
 import { addCardWindow } from './card.js';
 import { saveBoard } from './persistence.js';
 import { updateMinimap } from './layout.js';
+import { undo, redo, pushState } from './history.js';
 
 export function initKeyboard() {
   window.addEventListener('keydown', e => {
@@ -20,7 +22,9 @@ export function initKeyboard() {
 
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 's') { e.preventDefault(); saveBoard(); return; }
-      if (e.key === 'z') { e.preventDefault(); /* TODO: undo */ return; }
+      if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); return; }
+      if (e.key === 'z') { e.preventDefault(); undo(); return; }
+      if (e.key === 'y') { e.preventDefault(); redo(); return; }
     }
 
     const keyMap = {
@@ -48,6 +52,7 @@ export function initKeyboard() {
         S.selectedEls.forEach(el => el.remove());
         S.setSelectedEls([]); S.setSelected(null);
         updateMinimap();
+        pushState();
       }
     }
 
