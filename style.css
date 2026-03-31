@@ -429,11 +429,8 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   height: 36px;
   border-radius: 50%;
   z-index: 1100;
-
-  /* ★ 클릭 가능 — Orb 위에서 더블클릭 받아야 하므로 */
   pointer-events: all;
   cursor: pointer;
-
   display: flex;
   align-items: center;
   justify-content: center;
@@ -451,7 +448,6 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   will-change: transform;
 }
 
-/* 보이지 않을 때는 클릭 불가 */
 #tool-orb:not(.orb-visible) {
   pointer-events: none;
 }
@@ -460,7 +456,6 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   opacity: 0.72;
 }
 
-/* 더블클릭+홀드 활성 상태 */
 #tool-orb.orb-active {
   opacity: 1 !important;
   background: var(--ink);
@@ -484,10 +479,74 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   color: var(--panel);
 }
 
-/* 미리보기 하이라이트 */
+/* ══════════════════════════════════════════════════════
+   Toolbar — Orb 드래그 모드 진입 시 확대 애니메이션
+══════════════════════════════════════════════════════ */
+#toolbar {
+  transition: box-shadow .15s, transform .22s cubic-bezier(.34,1.56,.64,1), border-color .2s;
+  transform-origin: center center;
+}
+
+#toolbar.tb-orb-zoom {
+  transform: scale(1.06);
+  box-shadow: 0 12px 36px rgba(26, 23, 20, 0.20),
+              0 0 0 2px rgba(43, 108, 176, 0.15);
+  border-color: color-mix(in srgb, var(--accent2) 40%, var(--border) 60%);
+}
+
+/* snapping과 동시 적용 시 transform 충돌 방지 */
+#toolbar.tb-orb-zoom.tb-snapping {
+  transition: left .2s cubic-bezier(.22,.68,.36,1),
+              top .2s cubic-bezier(.22,.68,.36,1),
+              box-shadow .15s,
+              transform .22s cubic-bezier(.34,1.56,.64,1),
+              border-color .2s;
+}
+
+/* ══════════════════════════════════════════════════════
+   선택 예정(미리보기) 표시 — 리디자인
+   부드러운 필 배경 + 스케일 팝 + 하단 인디케이터
+══════════════════════════════════════════════════════ */
 .tbtn.orb-preview {
-  background: rgba(43, 108, 176, 0.18) !important;
-  outline: 2px solid var(--accent2);
-  outline-offset: 1px;
-  color: var(--ink) !important;
+  background: var(--ink) !important;
+  color: var(--panel) !important;
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.25),
+              0 4px 12px rgba(26, 23, 20, 0.18);
+  border-radius: 10px;
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1),
+              background .12s, color .12s, box-shadow .15s;
+  z-index: 10;
+}
+
+/* 하단 도트 인디케이터 */
+.tbtn.orb-preview::before {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent2);
+  box-shadow: 0 0 6px rgba(43, 108, 176, 0.5);
+  animation: orb-dot-pulse .8s ease-in-out infinite alternate;
+}
+
+@keyframes orb-dot-pulse {
+  0%   { opacity: .6; transform: translateX(-50%) scale(0.8); }
+  100% { opacity: 1;  transform: translateX(-50%) scale(1.15); }
+}
+
+/* 나머지 버튼은 드래그 모드 중 살짝 흐려지게 */
+#toolbar.tb-orb-zoom .tbtn:not(.orb-preview):not(.active) {
+  opacity: 0.45;
+  transition: opacity .15s;
+}
+
+/* 현재 active 상태 버튼도 미리보기가 아니면 dim */
+#toolbar.tb-orb-zoom .tbtn.active:not(.orb-preview) {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--ink) 60%, transparent);
 }
