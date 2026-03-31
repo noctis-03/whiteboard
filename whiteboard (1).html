@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5f2eb">
+<title>∞ Canvas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&display=swap');
+
+/* ══════════════════════════════════════════
+   ROOT TOKENS
+══════════════════════════════════════════ */
+:root {
+  --bg:#f5f2eb; --grid:#d8d3c8; --ink:#1a1714;
+  --panel:#faf8f4; --border:#c8c3b8; --shadow:rgba(26,23,20,0.14);
+  --accent:#c84b2f; --accent2:#2b6cb0;
+  /* layout sizes – overridden by JS */
+  --tb-w: 60px;   /* sidebar width  (≥768px) */
+  --tb-h: 60px;   /* bottom bar h   (<768px) */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top,    0px);
+  --safe-l: env(safe-area-inset-left,   0px);
+  --safe-r: env(safe-area-inset-right,  0px);
+}
+
+/* ── Reset ── */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;}
+body{
+  font-family:'DM Mono',monospace;
+  background:var(--bg);
+  user-select:none;-webkit-user-select:none;
+  touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* ══════════════════════════════════════════
+   CANVAS LAYERS
+══════════════════════════════════════════ */
+#grid{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(circle,var(--grid) 1.5px,transparent 1.5px);
+  background-size:40px 40px;
+}
+#viewport{position:fixed;overflow:hidden;z-index:1;}
+#board{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;}
+#svg-layer{position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;}
+#preview-canvas{position:fixed;pointer-events:none;z-index:500;}
+
+/* Selection lasso */
+#sel-rect{
+  position:fixed;border:1.5px solid var(--accent2);
+  background:rgba(43,108,176,0.08);pointer-events:none;
+  display:none;z-index:600;border-radius:2px;
+}
+.el.lasso-hover>.el-body{outline:2px dashed var(--accent2);outline-offset:2px;}
+
+/* ══════════════════════════════════════════
+   ELEMENTS (sticky / text / image)
+══════════════════════════════════════════ */
+.el{position:absolute;}
+.el-body{width:100%;height:100%;border-radius:2px;}
+.el-handles{display:none;position:absolute;inset:-1px;pointer-events:none;}
+.el.selected>.el-body{outline:2px solid var(--accent2);outline-offset:2px;}
+.el.selected>.el-handles{display:block;}
+
+.h-move{position:absolute;inset:0;cursor:move;pointer-events:all;}
+.h-resize{
+  position:absolute;width:12px;height:12px;
+  background:white;border:2px solid var(--accent2);border-radius:2px;pointer-events:all;
+}
+.h-resize.nw{top:-6px;left:-6px;cursor:nw-resize;}
+.h-resize.ne{top:-6px;right:-6px;cursor:ne-resize;}
+.h-resize.se{bottom:-6px;right:-6px;cursor:se-resize;}
+.h-resize.sw{bottom:-6px;left:-6px;cursor:sw-resize;}
+.h-resize.n{top:-6px;left:calc(50% - 6px);cursor:n-resize;}
+.h-resize.s{bottom:-6px;left:calc(50% - 6px);cursor:s-resize;}
+.h-resize.e{top:calc(50% - 6px);right:-6px;cursor:e-resize;}
+.h-resize.w{top:calc(50% - 6px);left:-6px;cursor:w-resize;}
+
+/* Touch: bigger hit targets */
+@media(pointer:coarse){
+  .h-resize{width:20px;height:20px;}
+  .h-resize.nw{top:-10px;left:-10px;}
+  .h-resize.ne{top:-10px;right:-10px;}
+  .h-resize.se{bottom:-10px;right:-10px;}
+  .h-resize.sw{bottom:-10px;left:-10px;}
+  .h-resize.n{top:-10px;left:calc(50% - 10px);}
+  .h-resize.s{bottom:-10px;left:calc(50% - 10px);}
+  .h-resize.e{top:calc(50% - 10px);right:-10px;}
+  .h-resize.w{top:calc(50% - 10px);left:-10px;}
+}
+
+/* Sticky */
+.sticky-body{
+  padding:10px;display:flex;flex-direction:column;
+  box-shadow:3px 5px 14px var(--shadow);min-width:120px;min-height:90px;
+}
+.sticky-bar{display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px;flex-shrink:0;}
+.sticky-btn{
+  width:18px;height:18px;border:none;border-radius:50%;
+  background:rgba(0,0,0,0.18);color:rgba(0,0,0,0.6);font-size:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.sticky-btn:hover{opacity:.7;}
+.sticky-body textarea{
+  flex:1;border:none;background:transparent;resize:none;
+  font-family:'Fraunces',serif;font-size:14px;font-weight:300;line-height:1.55;
+  color:var(--ink);outline:none;cursor:text;min-height:60px;
+}
+
+/* Text */
+.text-body{
+  padding:4px 6px;min-width:60px;min-height:30px;white-space:pre-wrap;
+  word-break:break-word;font-family:'Fraunces',serif;font-weight:300;
+  line-height:1.4;outline:none;cursor:text;background:transparent;
+}
+
+/* Image */
+.image-body{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;border-radius:1px;}
+
+/* ══════════════════════════════════════════
+   SHARED BUTTON / DOT / STROKE STYLES
+══════════════════════════════════════════ */
+.tbtn{
+  display:flex;align-items:center;justify-content:center;
+  border:none;border-radius:8px;background:transparent;
+  cursor:pointer;font-size:16px;color:var(--ink);
+  transition:background .12s,transform .1s;
+  position:relative;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;
+}
+.tbtn:active{transform:scale(.93);}
+.tbtn.active{background:var(--ink);color:var(--panel);}
+
+/* tooltip — desktop only */
+@media(hover:hover){
+  .tbtn[data-tip]:hover{background:rgba(0,0,0,0.07);transform:translateY(-1px);}
+  .tbtn[data-tip]:hover::after{
+    content:attr(data-tip);position:absolute;
+    background:var(--ink);color:var(--panel);font-size:10px;
+    padding:3px 7px;border-radius:5px;white-space:nowrap;pointer-events:none;z-index:9999;
+  }
+}
+
+.cdot{
+  border-radius:50%;cursor:pointer;border:2px solid transparent;
+  transition:transform .1s,border-color .1s;flex-shrink:0;
+}
+.cdot:hover{transform:scale(1.2);}
+.cdot.active{border-color:var(--ink);transform:scale(1.15);}
+
+.sbtn{
+  display:flex;align-items:center;justify-content:center;
+  border:1.5px solid var(--border);border-radius:6px;
+  cursor:pointer;background:transparent;transition:background .12s;flex-shrink:0;
+}
+.sbtn:hover{background:rgba(0,0,0,0.07);}
+.sbtn.active{background:var(--ink);}
+.sbtn.active .sline{background:var(--panel);}
+.sline{border-radius:99px;background:var(--ink);width:60%;}
+
+.sep{background:var(--border);flex-shrink:0;}
+
+/* ══════════════════════════════════════════
+   ★ SIDEBAR TOOLBAR  (≥ 768 px wide)
+══════════════════════════════════════════ */
+#toolbar{
+  position:fixed;left:0;top:0;bottom:0;
+  width:var(--tb-w);
+  z-index:1000;
+  background:var(--panel);
+  border-right:1.5px solid var(--border);
+  box-shadow:2px 0 12px var(--shadow);
+  display:flex;flex-direction:column;align-items:center;
+  padding:8px 0;
+  gap:2px;
+  overflow:hidden;
+  /* safe area */
+  padding-top:calc(8px + var(--safe-t));
+  padding-bottom:calc(8px + var(--safe-b));
+  padding-left:var(--safe-l);
+}
+
+/* sidebar button sizes */
+#toolbar .tbtn{width:44px;height:44px;font-size:16px;}
+#toolbar .tbtn[data-tip]:hover::after{left:calc(100% + 8px);top:50%;transform:translateY(-50%);}
+#toolbar .cdot{width:20px;height:20px;}
+#toolbar .sbtn{width:36px;height:24px;}
+#toolbar .sep{width:32px;height:1px;margin:3px 0;}
+
+/* ══════════════════════════════════════════
+   ★ BOTTOM TOOLBAR  (< 768 px wide)
+══════════════════════════════════════════ */
+@media(max-width:767px){
+  #toolbar{
+    /* reset sidebar */
+    left:0;right:0;bottom:0;top:auto;
+    width:100%;height:auto;
+    flex-direction:row;
+    border-right:none;border-top:1.5px solid var(--border);
+    box-shadow:0 -2px 12px var(--shadow);
+    padding:6px 8px;
+    padding-bottom:calc(6px + var(--safe-b));
+    padding-left:calc(8px + var(--safe-l));
+    padding-right:calc(8px + var(--safe-r));
+    overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    justify-content:flex-start;
+    gap:3px;
+  }
+  #toolbar::-webkit-scrollbar{display:none;}
+  #toolbar .tbtn{width:40px;height:40px;font-size:18px;flex-shrink:0;}
+  #toolbar .cdot{width:22px;height:22px;flex-shrink:0;}
+  #toolbar .sbtn{width:30px;height:30px;flex-shrink:0;}
+  #toolbar .sep{width:1px;height:28px;margin:0 2px;}
+  /* tooltip 비활성 */
+  #toolbar .tbtn[data-tip]:hover::after{display:none;}
+}
+
+/* ══════════════════════════════════════════
+   TOPBAR
+══════════════════════════════════════════ */
+#topbar{
+  position:fixed;z-index:1000;
+  display:flex;align-items:center;gap:6px;
+  pointer-events:none;
+}
+#topbar>*{pointer-events:all;}
+
+/* desktop: top-center */
+#topbar{
+  top:calc(14px + var(--safe-t));
+  left:calc(var(--tb-w) + var(--safe-l));
+  right:0;
+  justify-content:center;
+}
+.pill{
+  background:var(--panel);border:1.5px solid var(--border);border-radius:999px;
+  padding:5px 13px;font-size:11px;color:var(--ink);
+  box-shadow:0 2px 8px var(--shadow);letter-spacing:.05em;white-space:nowrap;
+}
+#zoom-pill{cursor:pointer;min-width:54px;text-align:center;}
+#zoom-pill:hover{background:rgba(0,0,0,0.06);}
+
+/* mobile: top-right corner */
+@media(max-width:767px){
+  #topbar{
+    top:calc(10px + var(--safe-t));
+    left:auto;
+    right:calc(10px + var(--safe-r));
+    justify-content:flex-end;
+  }
+  #title-pill{display:none;}
+  .pill{padding:4px 10px;font-size:10px;}
+}
+
+/* ══════════════════════════════════════════
+   CONTEXT MENU
+══════════════════════════════════════════ */
+#ctx{
+  position:fixed;z-index:9999;background:var(--panel);
+  border:1.5px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 30px var(--shadow);padding:6px;display:none;min-width:140px;
+}
+.citem{
+  padding:9px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink);
+  transition:background .1s;
+}
+.citem:hover,.citem:active{background:rgba(0,0,0,0.07);}
+.citem.danger{color:var(--accent);}
+.cdiv{height:1px;background:var(--border);margin:4px 0;}
+
+/* ══════════════════════════════════════════
+   SNACKBAR
+══════════════════════════════════════════ */
+#snack{
+  position:fixed;left:50%;
+  transform:translateX(-50%) translateY(-8px);
+  background:var(--ink);color:var(--panel);
+  font-size:11px;padding:6px 14px;border-radius:999px;
+  opacity:0;transition:opacity .2s,transform .2s;
+  z-index:9999;pointer-events:none;white-space:nowrap;
+}
+#snack.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* desktop: below topbar */
+#snack{top:58px;}
+@media(max-width:767px){
+  #snack{top:calc(50px + var(--safe-t));}
+}
+
+/* ══════════════════════════════════════════
+   MINIMAP
+══════════════════════════════════════════ */
+#minimap{
+  position:fixed;right:16px;
+  width:130px;height:84px;
+  background:var(--panel);border:1.5px solid var(--border);border-radius:8px;
+  overflow:hidden;box-shadow:0 2px 10px var(--shadow);z-index:999;
+  bottom:calc(var(--tb-h) + 8px);  /* updated by JS */
+}
+/* hide on small screens */
+@media(max-width:767px){
+  #minimap{display:none;}
+}
+
+/* ══════════════════════════════════════════
+   CURSOR OVERRIDES
+══════════════════════════════════════════ */
+body[data-tool="pan"] #viewport{cursor:grab;}
+body[data-tool="pan"].panning #viewport{cursor:grabbing;}
+body[data-tool="pen"] #viewport,
+body[data-tool="highlight"] #viewport,
+body[data-tool="eraser"] #viewport,
+body[data-tool="rect"] #viewport,
+body[data-tool="circle"] #viewport,
+body[data-tool="arrow"] #viewport{cursor:crosshair;}
+body[data-tool="text"] #viewport{cursor:text;}
+body[data-tool="select"] #viewport{cursor:default;}
+</style>
+</head>
+<body data-tool="select">
+
+<div id="grid"></div>
+<canvas id="preview-canvas"></canvas>
+<div id="sel-rect"></div>
+
+<div id="topbar">
+  <div class="pill" id="title-pill">∞ Canvas</div>
+  <div class="pill" id="zoom-pill" onclick="resetView()">100%</div>
+</div>
+
+<div id="ctx">
+  <div class="citem" onclick="ctxDo('front')">↑ 맨 앞으로</div>
+  <div class="citem" onclick="ctxDo('back')">↓ 맨 뒤로</div>
+  <div class="cdiv"></div>
+  <div class="citem" onclick="ctxDo('dup')">⊞ 복제</div>
+  <div class="cdiv"></div>
+  <div class="citem danger" onclick="ctxDo('del')">✕ 삭제</div>
+</div>
+
+<div id="snack"></div>
+
+<div id="viewport">
+  <div id="board">
+    <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<canvas id="minimap" width="130" height="84"></canvas>
+
+<!-- ══ TOOLBAR ══ -->
+<div id="toolbar">
+  <!-- 도구 선택 -->
+  <button class="tbtn active" id="t-select"    data-tip="선택 (V)"    onclick="setTool('select')">⊹</button>
+  <button class="tbtn"        id="t-pan"        data-tip="이동 (H)"    onclick="setTool('pan')">✋</button>
+  <div class="sep"></div>
+  <!-- 그리기 -->
+  <button class="tbtn" id="t-pen"       data-tip="펜 (P)"       onclick="setTool('pen')">✏️</button>
+  <button class="tbtn" id="t-highlight" data-tip="형광펜 (L)"    onclick="setTool('highlight')">🖊️</button>
+  <button class="tbtn" id="t-eraser"    data-tip="지우개 (E)"    onclick="setTool('eraser')">◻</button>
+  <div class="sep"></div>
+  <!-- 요소 추가 -->
+  <button class="tbtn" id="t-sticky" data-tip="포스트잇 (S)"  onclick="addSticky()">📄</button>
+  <button class="tbtn" id="t-text"   data-tip="텍스트 (T)"    onclick="setTool('text')">T</button>
+  <button class="tbtn" id="t-rect"   data-tip="사각형 (R)"    onclick="setTool('rect')">□</button>
+  <button class="tbtn" id="t-circle" data-tip="원 (C)"        onclick="setTool('circle')">○</button>
+  <button class="tbtn" id="t-arrow"  data-tip="화살표 (A)"    onclick="setTool('arrow')">→</button>
+  <div class="sep"></div>
+  <!-- 이미지 -->
+  <button class="tbtn" data-tip="이미지" onclick="document.getElementById('img-in').click()">🖼️</button>
+  <div class="sep"></div>
+  <!-- 색상 -->
+  <div class="cdot active" style="background:#1a1714" data-c="#1a1714" onclick="setColor(this)"></div>
+  <div class="cdot" style="background:#c84b2f" data-c="#c84b2f" onclick="setColor(this)"></div>
+  <div class="cdot" style="background:#2b6cb0" data-c="#2b6cb0" onclick="setColor(this)"></div>
+  <div class="cdot" style="background:#2d8a4e" data-c="#2d8a4e" onclick="setColor(this)"></div>
+  <div class="cdot" style="background:#7c3d9e" data-c="#7c3d9e" onclick="setColor(this)"></div>
+  <div class="cdot" style="background:#e8a320" data-c="#e8a320" onclick="setColor(this)"></div>
+  <div class="sep"></div>
+  <!-- 선 굵기 -->
+  <button class="sbtn active" data-sw="2"  onclick="setStroke(this,2)"><div class="sline" style="height:2px"></div></button>
+  <button class="sbtn"        data-sw="5"  onclick="setStroke(this,5)"><div class="sline" style="height:4px"></div></button>
+  <button class="sbtn"        data-sw="10" onclick="setStroke(this,10)"><div class="sline" style="height:7px"></div></button>
+  <div class="sep"></div>
+  <!-- 유틸 -->
+  <button class="tbtn" data-tip="그리드 (G)"  onclick="toggleGrid()">⊞</button>
+  <button class="tbtn" data-tip="저장 Ctrl+S" onclick="saveBoard()">💾</button>
+  <button class="tbtn" data-tip="불러오기"     onclick="document.getElementById('load-in').click()">📂</button>
+  <button class="tbtn" data-tip="전체 지우기"  onclick="clearAll()">🗑️</button>
+</div>
+
+<input type="file" id="img-in"  accept="image/*"       style="display:none" onchange="handleImg(event)">
+<input type="file" id="load-in" accept=".canvas,.json" style="display:none" onchange="loadBoard(event)">
+
+<script>
+/* ════════════════════════════════════════════════════════
+   GLOBALS
+════════════════════════════════════════════════════════ */
+const vp    = document.getElementById('viewport');
+const board = document.getElementById('board');
+const svgl  = document.getElementById('svg-layer');
+const pCvs  = document.getElementById('preview-canvas');
+const pCtx  = pCvs.getContext('2d');
+const mmCvs = document.getElementById('minimap');
+const mmCtx = mmCvs.getContext('2d');
+const selRect = document.getElementById('sel-rect');
+
+let T = {x:0, y:0, s:1};
+let tool='select', color='#1a1714', sw=2;
+
+let panning=false, panOrigin={x:0,y:0};
+let drawing=false, drawPts=[], livePth=null, shapeA=null;
+let dragging=null;
+let resizing=null;
+let selected=null;
+let selectedEls=[];
+let lasso=null;
+let touchLasso=null;
+let touchPanOrigin=null;
+let ctxEl=null;
+let strokes=[];
+let zTop=10;
+let gridOn=true;
+let longPressTimer=null;
+
+/* ════════════════════════════════════════════════════════
+   RESPONSIVE LAYOUT
+════════════════════════════════════════════════════════ */
+const MOBILE_BP = 767; // px
+
+function isMobile(){ return window.innerWidth <= MOBILE_BP; }
+
+function syncLayout(){
+  const tb = document.getElementById('toolbar');
+  const mm = document.getElementById('minimap');
+  const tbRect = tb.getBoundingClientRect();
+
+  if(isMobile()){
+    // bottom bar layout
+    const tbH = tbRect.height;
+    document.documentElement.style.setProperty('--tb-h', tbH+'px');
+    document.documentElement.style.setProperty('--tb-w', '0px');
+    // viewport: full width, shrunk from bottom
+    vp.style.cssText = `top:0;left:0;right:0;bottom:${tbH}px;`;
+    pCvs.style.cssText = `top:0;left:0;right:0;bottom:${tbH}px;width:${window.innerWidth}px;height:${window.innerHeight - tbH}px;`;
+    pCvs.width  = window.innerWidth;
+    pCvs.height = window.innerHeight - tbH;
+  } else {
+    // sidebar layout
+    const tbW = tbRect.width;
+    document.documentElement.style.setProperty('--tb-w', tbW+'px');
+    document.documentElement.style.setProperty('--tb-h', '80px');
+    // viewport: shrunk from left
+    vp.style.cssText = `top:0;left:${tbW}px;right:0;bottom:0;`;
+    pCvs.style.cssText = `top:0;left:${tbW}px;right:0;bottom:0;width:${window.innerWidth - tbW}px;height:${window.innerHeight}px;`;
+    pCvs.width  = window.innerWidth - tbW;
+    pCvs.height = window.innerHeight;
+    // minimap position
+    if(mm) mm.style.bottom = '88px';
+  }
+  updateGrid();
+  updateMinimap();
+}
+
+window.addEventListener('resize', ()=>{ syncLayout(); });
+window.addEventListener('orientationchange', ()=>setTimeout(syncLayout, 250));
+
+/* ════════════════════════════════════════════════════════
+   TRANSFORM
+════════════════════════════════════════════════════════ */
+function applyT(){
+  board.style.transform = `translate(${T.x}px,${T.y}px) scale(${T.s})`;
+  document.getElementById('zoom-pill').textContent = Math.round(T.s*100)+'%';
+  updateGrid(); updateMinimap();
+}
+function s2b(sx,sy){ return {x:(sx-T.x)/T.s, y:(sy-T.y)/T.s}; }
+function b2s(bx,by){ return {x:bx*T.s+T.x,   y:by*T.s+T.y}; }
+function resetView(){ T={x:0,y:0,s:1}; applyT(); }
+
+function updateGrid(){
+  const g = document.getElementById('grid');
+  if(!gridOn){ g.style.display='none'; return; }
+  g.style.display='block';
+  const sz = 40*T.s;
+  g.style.backgroundSize = `${sz}px ${sz}px`;
+  g.style.backgroundPosition = `${T.x%sz}px ${T.y%sz}px`;
+}
+function toggleGrid(){ gridOn=!gridOn; updateGrid(); }
+
+/* ════════════════════════════════════════════════════════
+   TOOL / COLOR / STROKE
+════════════════════════════════════════════════════════ */
+function setTool(t){
+  tool=t;
+  document.body.setAttribute('data-tool',t);
+  document.querySelectorAll('.tbtn[id^="t-"]').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById('t-'+t);
+  if(btn) btn.classList.add('active');
+  deselectAll(); closeCtx();
+}
+function setColor(el){
+  document.querySelectorAll('.cdot').forEach(d=>d.classList.remove('active'));
+  el.classList.add('active'); color=el.dataset.c;
+}
+function setStroke(el,v){
+  document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active'); sw=v;
+}
+
+/* ════════════════════════════════════════════════════════
+   SELECTION
+════════════════════════════════════════════════════════ */
+function select(el, additive=false){
+  if(!additive) deselectAll();
+  if(selectedEls.includes(el)) return;
+  selectedEls.push(el);
+  selected=el;
+  el.classList.add('selected');
+  el.querySelector('.el-handles').style.display='block';
+}
+function deselectAll(){
+  selectedEls.forEach(el=>{
+    el.classList.remove('selected');
+    el.querySelector('.el-handles').style.display='none';
+  });
+  selectedEls=[]; selected=null;
+}
+
+/* ════════════════════════════════════════════════════════
+   LASSO
+════════════════════════════════════════════════════════ */
+function showSelRect(l){
+  const x=Math.min(l.x0,l.x1), y=Math.min(l.y0,l.y1);
+  const w=Math.abs(l.x1-l.x0), h=Math.abs(l.y1-l.y0);
+  selRect.style.cssText=`display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
+}
+function hideSelRect(){ selRect.style.display='none'; }
+function highlightLasso(l){
+  const sx=Math.min(l.x0,l.x1), sy=Math.min(l.y0,l.y1);
+  const ex=Math.max(l.x0,l.x1), ey=Math.max(l.y0,l.y1);
+  board.querySelectorAll('.el').forEach(el=>{
+    const bx=parseFloat(el.style.left), by=parseFloat(el.style.top);
+    const bw=parseFloat(el.style.width), bh=parseFloat(el.style.height);
+    const s2=b2s(bx,by), se=b2s(bx+bw,by+bh);
+    el.classList.toggle('lasso-hover', se.x>sx&&s2.x<ex&&se.y>sy&&s2.y<ey);
+  });
+}
+function finalizeLasso(l){
+  const sx=Math.min(l.x0,l.x1), sy=Math.min(l.y0,l.y1);
+  const ex=Math.max(l.x0,l.x1), ey=Math.max(l.y0,l.y1);
+  deselectAll();
+  if(ex-sx<5 && ey-sy<5) return;
+  board.querySelectorAll('.el').forEach(el=>{
+    el.classList.remove('lasso-hover');
+    const bx=parseFloat(el.style.left), by=parseFloat(el.style.top);
+    const bw=parseFloat(el.style.width), bh=parseFloat(el.style.height);
+    const s2=b2s(bx,by), se=b2s(bx+bw,by+bh);
+    if(se.x>sx&&s2.x<ex&&se.y>sy&&s2.y<ey) select(el,true);
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   WHEEL ZOOM
+════════════════════════════════════════════════════════ */
+vp.addEventListener('wheel',e=>{
+  e.preventDefault(); closeCtx();
+  const f = e.deltaY<0 ? 1.09 : 0.92;
+  const ns = Math.min(8, Math.max(0.08, T.s*f));
+  T.x = e.clientX-(e.clientX-T.x)*(ns/T.s);
+  T.y = e.clientY-(e.clientY-T.y)*(ns/T.s);
+  T.s=ns; applyT();
+},{passive:false});
+
+/* ════════════════════════════════════════════════════════
+   MOUSE — DOWN / MOVE / UP
+════════════════════════════════════════════════════════ */
+vp.addEventListener('mousedown',e=>{
+  if(e.button===2) return;
+  closeCtx();
+  if(e.button===1 || tool==='pan'){
+    panning=true;
+    panOrigin={x:e.clientX-T.x, y:e.clientY-T.y};
+    document.body.classList.add('panning');
+    e.preventDefault(); return;
+  }
+  const bp=s2b(e.clientX,e.clientY);
+  if(tool==='pen'||tool==='highlight'){
+    drawing=true; drawPts=[bp];
+    livePth=mkSvg('path');
+    livePth.setAttribute('fill','none');
+    livePth.setAttribute('stroke', tool==='highlight'?color+'99':color);
+    livePth.setAttribute('stroke-width', tool==='highlight'?sw*4:sw);
+    livePth.setAttribute('stroke-linecap','round');
+    livePth.setAttribute('stroke-linejoin','round');
+    svgl.appendChild(livePth); return;
+  }
+  if(tool==='eraser'){drawing=true; eraseAt(bp); return;}
+  if(tool==='rect'||tool==='circle'||tool==='arrow'){drawing=true; shapeA=bp; return;}
+  if(tool==='text'){ addText(bp); return; }
+  if(tool==='select'){
+    if(!e.target.closest('.el')){
+      deselectAll();
+      lasso={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY};
+      showSelRect(lasso);
+      e.preventDefault();
+    }
+  }
+});
+
+window.addEventListener('mousemove',e=>{
+  if(panning){ T.x=e.clientX-panOrigin.x; T.y=e.clientY-panOrigin.y; applyT(); return; }
+  if(dragging){
+    const bp=s2b(e.clientX,e.clientY);
+    if(dragging.els){
+      dragging.els.forEach(d=>{ d.el.style.left=(bp.x-d.ox)+'px'; d.el.style.top=(bp.y-d.oy)+'px'; });
+    } else {
+      dragging.el.style.left=(bp.x-dragging.ox)+'px';
+      dragging.el.style.top =(bp.y-dragging.oy)+'px';
+    }
+    updateMinimap(); return;
+  }
+  if(resizing){ doResize(e.clientX,e.clientY); return; }
+  if(lasso){ lasso.x1=e.clientX; lasso.y1=e.clientY; showSelRect(lasso); highlightLasso(lasso); return; }
+  if(!drawing) return;
+  const bp=s2b(e.clientX,e.clientY);
+  if(tool==='pen'||tool==='highlight'){ drawPts.push(bp); if(livePth) livePth.setAttribute('d',pts2path(drawPts)); }
+  if(tool==='eraser') eraseAt(bp);
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA) previewShape(shapeA,bp);
+});
+
+window.addEventListener('mouseup',e=>{
+  document.body.classList.remove('panning');
+  if(panning){ panning=false; return; }
+  if(dragging){ dragging=null; updateMinimap(); return; }
+  if(resizing){ resizing=null; updateMinimap(); return; }
+  if(lasso){ finalizeLasso(lasso); lasso=null; hideSelRect(); return; }
+  if(!drawing) return;
+  drawing=false;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  if(tool==='pen'||tool==='highlight'){
+    if(drawPts.length>1){
+      const col=tool==='highlight'?color+'99':color;
+      const lw=tool==='highlight'?sw*4:sw;
+      const attrs={d:pts2path(drawPts),stroke:col,'stroke-width':lw,fill:'none','stroke-linecap':'round','stroke-linejoin':'round'};
+      livePth && setAttrs(livePth,attrs);
+      strokes.push({kind:'path',attrs,svgEl:livePth});
+    } else { livePth && svgl.removeChild(livePth); }
+    livePth=null; drawPts=[];
+  }
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA){
+    const bp=s2b(e.clientX,e.clientY);
+    if(Math.abs(bp.x-shapeA.x)>4||Math.abs(bp.y-shapeA.y)>4) finalizeShape(shapeA,bp);
+    shapeA=null;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   CONTEXT MENU
+════════════════════════════════════════════════════════ */
+vp.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const el=e.target.closest('.el');
+  if(el) showCtxMenu(el, e.clientX, e.clientY);
+});
+document.addEventListener('click',()=>closeCtx());
+function showCtxMenu(el,cx,cy){
+  ctxEl=el;
+  const m=document.getElementById('ctx');
+  const mw=150, mh=160;
+  let lx=cx, ly=cy;
+  if(lx+mw>innerWidth)  lx=innerWidth-mw-8;
+  if(ly+mh>innerHeight) ly=cy-mh-8;
+  m.style.left=lx+'px'; m.style.top=ly+'px'; m.style.display='block';
+}
+function closeCtx(){ document.getElementById('ctx').style.display='none'; }
+function ctxDo(a){
+  if(!ctxEl) return; closeCtx();
+  if(a==='del'){
+    const targets=selectedEls.length>0?[...selectedEls]:[ctxEl];
+    targets.forEach(e=>e.remove());
+    selectedEls=[]; selected=null; updateMinimap();
+  }
+  if(a==='dup') duplicateEl(ctxEl);
+  if(a==='front') ctxEl.style.zIndex=++zTop;
+  if(a==='back')  ctxEl.style.zIndex=1;
+}
+
+/* ════════════════════════════════════════════════════════
+   LONG-PRESS (mobile context menu)
+════════════════════════════════════════════════════════ */
+function startLongPress(target,cx,cy){
+  longPressTimer=setTimeout(()=>{
+    const el=target.closest('.el');
+    if(el) showCtxMenu(el, cx, cy);
+  },500);
+}
+function cancelLongPress(){ clearTimeout(longPressTimer); longPressTimer=null; }
+
+/* ════════════════════════════════════════════════════════
+   SVG HELPERS
+════════════════════════════════════════════════════════ */
+function mkSvg(tag){ return document.createElementNS('http://www.w3.org/2000/svg',tag); }
+function setAttrs(el,attrs){ for(const[k,v] of Object.entries(attrs)) el.setAttribute(k,v); }
+function pts2path(pts){
+  if(pts.length<2) return '';
+  let d=`M${pts[0].x},${pts[0].y}`;
+  for(let i=1;i<pts.length;i++){
+    const p=pts[i-1],c=pts[i];
+    d+=` Q${p.x},${p.y} ${(p.x+c.x)/2},${(p.y+c.y)/2}`;
+  }
+  return d;
+}
+
+function previewShape(a,b){
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  // offset for sidebar
+  const offX = isMobile() ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tb-w'))||0;
+  const sa=b2s(a.x,a.y), sb=b2s(b.x,b.y);
+  // convert board→screen
+  const toS = (bx,by)=>({ x:bx*T.s+T.x-offX, y:by*T.s+T.y });
+  const ssa=toS(a.x,a.y), ssb=toS(b.x,b.y);
+  pCtx.save();
+  pCtx.strokeStyle=color; pCtx.lineWidth=sw*T.s; pCtx.lineCap='round'; pCtx.lineJoin='round';
+  if(tool==='rect') pCtx.strokeRect(ssa.x,ssa.y,ssb.x-ssa.x,ssb.y-ssa.y);
+  if(tool==='circle'){
+    const rx=(ssb.x-ssa.x)/2,ry=(ssb.y-ssa.y)/2;
+    pCtx.beginPath(); pCtx.ellipse(ssa.x+rx,ssa.y+ry,Math.abs(rx),Math.abs(ry),0,0,Math.PI*2); pCtx.stroke();
+  }
+  if(tool==='arrow'){
+    pCtx.beginPath(); pCtx.moveTo(ssa.x,ssa.y); pCtx.lineTo(ssb.x,ssb.y); pCtx.stroke();
+    const ang=Math.atan2(ssb.y-ssa.y,ssb.x-ssa.x), hl=(12+sw*2)*T.s;
+    pCtx.beginPath();
+    pCtx.moveTo(ssb.x,ssb.y); pCtx.lineTo(ssb.x-hl*Math.cos(ang-.45),ssb.y-hl*Math.sin(ang-.45));
+    pCtx.moveTo(ssb.x,ssb.y); pCtx.lineTo(ssb.x-hl*Math.cos(ang+.45),ssb.y-hl*Math.sin(ang+.45));
+    pCtx.stroke();
+  }
+  pCtx.restore();
+}
+
+function finalizeShape(a,b){
+  if(tool==='rect'){
+    const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
+    const el=mkSvg('rect');
+    const attrs={x,y,width:w,height:h,fill:'none',stroke:color,'stroke-width':sw,'stroke-linecap':'round'};
+    setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind:'rect',attrs,svgEl:el});
+  }
+  if(tool==='circle'){
+    const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2,rx=Math.abs(b.x-a.x)/2,ry=Math.abs(b.y-a.y)/2;
+    const el=mkSvg('ellipse');
+    const attrs={cx,cy,rx,ry,fill:'none',stroke:color,'stroke-width':sw};
+    setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind:'ellipse',attrs,svgEl:el});
+  }
+  if(tool==='arrow'){
+    const g=mkSvg('g'), line=mkSvg('line');
+    setAttrs(line,{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':sw,'stroke-linecap':'round'});
+    const ang=Math.atan2(b.y-a.y,b.x-a.x),hl=12+sw*2;
+    const d=`M${b.x},${b.y} L${b.x-hl*Math.cos(ang-.45)},${b.y-hl*Math.sin(ang-.45)} M${b.x},${b.y} L${b.x-hl*Math.cos(ang+.45)},${b.y-hl*Math.sin(ang+.45)}`;
+    const path=mkSvg('path');
+    setAttrs(path,{d,stroke:color,'stroke-width':sw,'stroke-linecap':'round',fill:'none'});
+    g.appendChild(line); g.appendChild(path); svgl.appendChild(g);
+    strokes.push({kind:'arrow',svgEl:g,attrs:{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':sw,hl,d}});
+  }
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   ERASER
+════════════════════════════════════════════════════════ */
+function eraseAt(bp){
+  const r=18/T.s;
+  for(let i=strokes.length-1;i>=0;i--){
+    try{
+      const bb=strokes[i].svgEl.getBBox();
+      if(bp.x>=bb.x-r&&bp.x<=bb.x+bb.width+r&&bp.y>=bb.y-r&&bp.y<=bb.y+bb.height+r){
+        svgl.removeChild(strokes[i].svgEl); strokes.splice(i,1);
+      }
+    }catch(e){}
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   ELEMENT SYSTEM
+════════════════════════════════════════════════════════ */
+function makeEl(x,y,w,h){
+  const el=document.createElement('div');
+  el.className='el';
+  el.style.cssText=`left:${x}px;top:${y}px;width:${w}px;height:${h}px;z-index:${++zTop};`;
+  return el;
+}
+
+function addHandles(el){
+  const hc=document.createElement('div');
+  hc.className='el-handles';
+
+  const mv=document.createElement('div'); mv.className='h-move';
+  function startMove(cx,cy){
+    if(tool!=='select') return;
+    if(!selectedEls.includes(el)){ deselectAll(); select(el); }
+    el.style.zIndex=++zTop;
+    const bp=s2b(cx,cy);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+  }
+  mv.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.stopPropagation(); e.preventDefault(); startMove(e.clientX,e.clientY); });
+  mv.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; e.stopPropagation(); e.preventDefault(); startMove(e.touches[0].clientX,e.touches[0].clientY); cancelLongPress(); },{passive:false});
+  hc.appendChild(mv);
+
+  ['nw','n','ne','e','se','s','sw','w'].forEach(dir=>{
+    const rh=document.createElement('div'); rh.className=`h-resize ${dir}`;
+    function startResize(cx,cy){
+      const r0={x:parseFloat(el.style.left),y:parseFloat(el.style.top),w:parseFloat(el.style.width),h:parseFloat(el.style.height)};
+      resizing={el,dir,r0,m0:s2b(cx,cy)};
+    }
+    rh.addEventListener('mousedown',e=>{ e.stopPropagation(); e.preventDefault(); startResize(e.clientX,e.clientY); });
+    rh.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; e.stopPropagation(); e.preventDefault(); startResize(e.touches[0].clientX,e.touches[0].clientY); },{passive:false});
+    hc.appendChild(rh);
+  });
+  el.appendChild(hc);
+}
+
+function doResize(cx,cy){
+  if(!resizing) return;
+  const {el,dir,r0,m0}=resizing;
+  const cur=s2b(cx,cy), dx=cur.x-m0.x, dy=cur.y-m0.y;
+  let {x,y,w,h}=r0;
+  const MW=60,MH=40;
+  if(dir.includes('e')){w=Math.max(MW,r0.w+dx);}
+  if(dir.includes('s')){h=Math.max(MH,r0.h+dy);}
+  if(dir.includes('w')){ const nw=Math.max(MW,r0.w-dx); x=r0.x+r0.w-nw; w=nw; }
+  if(dir.includes('n')){ const nh=Math.max(MH,r0.h-dy); y=r0.y+r0.h-nh; h=nh; }
+  el.style.left=x+'px'; el.style.top=y+'px'; el.style.width=w+'px'; el.style.height=h+'px';
+}
+
+function attachSelectClick(el){
+  el.addEventListener('mousedown',e=>{
+    if(tool!=='select') return;
+    e.stopPropagation();
+    const add=e.shiftKey||e.metaKey||e.ctrlKey;
+    if(!add && !selectedEls.includes(el)) deselectAll();
+    select(el, add || selectedEls.includes(el));
+    el.style.zIndex=++zTop;
+    const bp=s2b(e.clientX,e.clientY);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+    e.preventDefault();
+  });
+  el.addEventListener('touchstart',e=>{
+    if(tool!=='select'||e.touches.length!==1) return;
+    e.stopPropagation();
+    const t=e.touches[0];
+    startLongPress(e.target, t.clientX, t.clientY);
+    if(!selectedEls.includes(el)) deselectAll();
+    select(el,false);
+    el.style.zIndex=++zTop;
+    const bp=s2b(t.clientX,t.clientY);
+    if(selectedEls.length>1){
+      dragging={els:selectedEls.map(e2=>({el:e2,ox:bp.x-parseFloat(e2.style.left),oy:bp.y-parseFloat(e2.style.top)}))};
+    } else {
+      dragging={el,ox:bp.x-parseFloat(el.style.left),oy:bp.y-parseFloat(el.style.top)};
+    }
+    e.preventDefault();
+  },{passive:false});
+}
+
+/* ════════════════════════════════════════════════════════
+   TOUCH EVENTS (global — pan / draw / lasso)
+════════════════════════════════════════════════════════ */
+vp.addEventListener('touchstart',e=>{
+  cancelLongPress();
+  if(e.touches.length===2) return; // pinch handled separately
+  if(e.touches.length!==1) return;
+  const t=e.touches[0];
+  closeCtx();
+
+  if(tool==='pan'){
+    touchPanOrigin={x:t.clientX-T.x, y:t.clientY-T.y};
+    document.body.classList.add('panning');
+    e.preventDefault(); return;
+  }
+  const bp=s2b(t.clientX,t.clientY);
+  if(tool==='pen'||tool==='highlight'){
+    drawing=true; drawPts=[bp];
+    livePth=mkSvg('path');
+    livePth.setAttribute('fill','none');
+    livePth.setAttribute('stroke',tool==='highlight'?color+'99':color);
+    livePth.setAttribute('stroke-width',tool==='highlight'?sw*4:sw);
+    livePth.setAttribute('stroke-linecap','round');
+    livePth.setAttribute('stroke-linejoin','round');
+    svgl.appendChild(livePth); e.preventDefault(); return;
+  }
+  if(tool==='eraser'){ drawing=true; eraseAt(bp); e.preventDefault(); return; }
+  if(tool==='rect'||tool==='circle'||tool==='arrow'){ drawing=true; shapeA=bp; e.preventDefault(); return; }
+  if(tool==='text'){ addText(bp); e.preventDefault(); return; }
+  if(tool==='select'){
+    if(!e.target.closest('.el')){
+      deselectAll();
+      touchLasso={x0:t.clientX,y0:t.clientY,x1:t.clientX,y1:t.clientY};
+      startLongPress(e.target, t.clientX, t.clientY);
+      showSelRect(touchLasso);
+      e.preventDefault();
+    }
+  }
+},{passive:false});
+
+window.addEventListener('touchmove',e=>{
+  if(e.touches.length===2) return;
+  if(e.touches.length!==1) return;
+  cancelLongPress();
+  const t=e.touches[0];
+  if(touchPanOrigin){ T.x=t.clientX-touchPanOrigin.x; T.y=t.clientY-touchPanOrigin.y; applyT(); e.preventDefault(); return; }
+  if(dragging){
+    const bp=s2b(t.clientX,t.clientY);
+    if(dragging.els){ dragging.els.forEach(d=>{ d.el.style.left=(bp.x-d.ox)+'px'; d.el.style.top=(bp.y-d.oy)+'px'; }); }
+    else { dragging.el.style.left=(bp.x-dragging.ox)+'px'; dragging.el.style.top=(bp.y-dragging.oy)+'px'; }
+    updateMinimap(); e.preventDefault(); return;
+  }
+  if(resizing){ doResize(t.clientX,t.clientY); updateMinimap(); e.preventDefault(); return; }
+  if(touchLasso){ touchLasso.x1=t.clientX; touchLasso.y1=t.clientY; showSelRect(touchLasso); highlightLasso(touchLasso); e.preventDefault(); return; }
+  if(!drawing) return;
+  e.preventDefault();
+  const bp=s2b(t.clientX,t.clientY);
+  if(tool==='pen'||tool==='highlight'){ drawPts.push(bp); if(livePth) livePth.setAttribute('d',pts2path(drawPts)); }
+  if(tool==='eraser') eraseAt(bp);
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA) previewShape(shapeA,bp);
+},{passive:false});
+
+window.addEventListener('touchend',e=>{
+  cancelLongPress();
+  document.body.classList.remove('panning');
+  if(touchPanOrigin){ touchPanOrigin=null; return; }
+  if(dragging){ dragging=null; updateMinimap(); return; }
+  if(resizing){ resizing=null; updateMinimap(); return; }
+  if(touchLasso){ finalizeLasso(touchLasso); touchLasso=null; hideSelRect(); return; }
+  if(!drawing) return;
+  drawing=false;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  const lastT=e.changedTouches[0];
+  if(tool==='pen'||tool==='highlight'){
+    if(drawPts.length>1){
+      const col=tool==='highlight'?color+'99':color, lw=tool==='highlight'?sw*4:sw;
+      const attrs={d:pts2path(drawPts),stroke:col,'stroke-width':lw,fill:'none','stroke-linecap':'round','stroke-linejoin':'round'};
+      livePth && setAttrs(livePth,attrs);
+      strokes.push({kind:'path',attrs,svgEl:livePth});
+    } else { livePth && svgl.removeChild(livePth); }
+    livePth=null; drawPts=[];
+  }
+  if((tool==='rect'||tool==='circle'||tool==='arrow')&&shapeA){
+    const bp=s2b(lastT.clientX,lastT.clientY);
+    if(Math.abs(bp.x-shapeA.x)>4||Math.abs(bp.y-shapeA.y)>4) finalizeShape(shapeA,bp);
+    shapeA=null;
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   PINCH ZOOM
+════════════════════════════════════════════════════════ */
+let ltDist=null;
+vp.addEventListener('touchstart',e=>{
+  if(e.touches.length===2)
+    ltDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+},{passive:true});
+vp.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    if(ltDist){
+      const ns=Math.min(8,Math.max(0.08,T.s*(d/ltDist)));
+      const mx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+      const my=(e.touches[0].clientY+e.touches[1].clientY)/2;
+      T.x=mx-(mx-T.x)*(ns/T.s); T.y=my-(my-T.y)*(ns/T.s); T.s=ns; applyT();
+    }
+    ltDist=d;
+  }
+},{passive:false});
+
+/* ════════════════════════════════════════════════════════
+   STICKY
+════════════════════════════════════════════════════════ */
+const SC=['#fff9c4','#fce4ec','#e3f2fd','#e8f5e9','#f3e5f5','#fff3e0'];
+let sci=0;
+function addSticky(opts={}){
+  const c=s2b(vp.offsetWidth/2,vp.offsetHeight/2);
+  const x=opts.x??c.x-100, y=opts.y??c.y-80;
+  const w=opts.w??200, h=opts.h??170;
+  const bg=opts.bg??SC[sci++%SC.length];
+  const el=makeEl(x,y,w,h);
+  el.dataset.kind='sticky';
+  const body=document.createElement('div');
+  body.className='el-body sticky-body';
+  body.style.background=bg;
+  body.innerHTML=`<div class="sticky-bar">
+    <button class="sticky-btn" onclick="cycleStickyBg(this.closest('.el'))">◐</button>
+    <button class="sticky-btn" onclick="this.closest('.el').remove();updateMinimap()">✕</button>
+  </div><textarea placeholder="메모...">${opts.text??''}</textarea>`;
+  const ta=body.querySelector('textarea');
+  ta.addEventListener('mousedown',e=>e.stopPropagation());
+  ta.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  el.appendChild(body);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el);
+  if(!opts.x) setTimeout(()=>ta.focus(),50);
+  updateMinimap(); return el;
+}
+function cycleStickyBg(el){
+  const b=el.querySelector('.sticky-body');
+  b.style.background=SC[(SC.indexOf(b.style.background)+1)%SC.length];
+}
+
+/* ════════════════════════════════════════════════════════
+   TEXT
+════════════════════════════════════════════════════════ */
+function addText(bp,opts={}){
+  const x=opts.x??bp.x, y=opts.y??bp.y;
+  const el=makeEl(x,y,opts.w??200,opts.h??50);
+  el.dataset.kind='text';
+  const body=document.createElement('div');
+  body.className='el-body text-body';
+  body.contentEditable=true; body.spellcheck=false;
+  body.style.color=opts.color??color;
+  body.style.fontSize=(opts.fontSize??Math.max(12,Math.round(22/T.s)))+'px';
+  body.textContent=opts.text??'';
+  body.addEventListener('mousedown',e=>e.stopPropagation());
+  body.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
+  body.addEventListener('blur',()=>{ if(!body.textContent.trim()&&!opts.text){el.remove();return;} updateMinimap(); });
+  el.appendChild(body);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el);
+  setTimeout(()=>{ body.focus(); placeCursorAtEnd(body); setTool('select'); },50);
+  updateMinimap(); return el;
+}
+function placeCursorAtEnd(el){
+  const r=document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ════════════════════════════════════════════════════════
+   IMAGE
+════════════════════════════════════════════════════════ */
+function addImage(src,opts={}){
+  const c=s2b(vp.offsetWidth/2,vp.offsetHeight/2);
+  const el=makeEl(opts.x??c.x-150, opts.y??c.y-100, opts.w??320, opts.h??240);
+  el.dataset.kind='image';
+  const img=document.createElement('img');
+  img.className='el-body image-body'; img.src=src;
+  el.appendChild(img);
+  addHandles(el); attachSelectClick(el);
+  board.appendChild(el); updateMinimap(); return el;
+}
+function handleImg(evt){
+  const f=evt.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{ addImage(e.target.result); showSnack('이미지 추가됨'); };
+  r.readAsDataURL(f); evt.target.value='';
+}
+
+/* ════════════════════════════════════════════════════════
+   DUPLICATE
+════════════════════════════════════════════════════════ */
+function duplicateEl(el){
+  const kind=el.dataset.kind;
+  const x=parseFloat(el.style.left)+20, y=parseFloat(el.style.top)+20;
+  const w=parseFloat(el.style.width), h=parseFloat(el.style.height);
+  if(kind==='sticky'){ addSticky({x,y,w,h,bg:el.querySelector('.sticky-body').style.background,text:el.querySelector('textarea').value}); }
+  else if(kind==='text'){ const b=el.querySelector('.text-body'); addText({},{x,y,w,h,text:b.textContent,color:b.style.color,fontSize:parseFloat(b.style.fontSize)}); }
+  else if(kind==='image'){ addImage(el.querySelector('img').src,{x,y,w,h}); }
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   KEYBOARD
+════════════════════════════════════════════════════════ */
+document.addEventListener('keydown',e=>{
+  const ae=document.activeElement;
+  if(ae?.tagName==='TEXTAREA'||ae?.isContentEditable) return;
+  const map={v:'select',h:'pan',p:'pen',l:'highlight',e:'eraser',r:'rect',c:'circle',a:'arrow',t:'text'};
+  if(map[e.key]){ setTool(map[e.key]); return; }
+  if(e.key==='s'&&!e.ctrlKey&&!e.metaKey){ addSticky(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){ e.preventDefault(); saveBoard(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='d'){ e.preventDefault(); (selectedEls.length?[...selectedEls]:(selected?[selected]:[])).forEach(duplicateEl); return; }
+  if(e.key==='Delete'||e.key==='Backspace'){ (selectedEls.length?[...selectedEls]:(selected?[selected]:[])).forEach(el=>el.remove()); selectedEls=[]; selected=null; updateMinimap(); return; }
+  if((e.ctrlKey||e.metaKey)&&e.key==='a'){ e.preventDefault(); deselectAll(); board.querySelectorAll('.el').forEach(el=>select(el,true)); return; }
+  if(e.key==='Escape'){ deselectAll(); return; }
+  if(e.key==='='||e.key==='+'){ T.s=Math.min(8,T.s*1.1); applyT(); }
+  if(e.key==='-'){ T.s=Math.max(0.08,T.s*0.9); applyT(); }
+  if(e.key==='0') resetView();
+  if(e.key==='g') toggleGrid();
+});
+
+/* ════════════════════════════════════════════════════════
+   MINIMAP
+════════════════════════════════════════════════════════ */
+function updateMinimap(){
+  if(isMobile()) return;
+  mmCtx.clearRect(0,0,130,84);
+  mmCtx.fillStyle='#e8e4dc'; mmCtx.fillRect(0,0,130,84);
+  const W=6000,H=6000,ox=W/2,oy=H/2,sx=130/W,sy=84/H;
+  board.querySelectorAll('.el').forEach(el=>{
+    const x=parseFloat(el.style.left)||0, y=parseFloat(el.style.top)||0;
+    const w=parseFloat(el.style.width)||60, h=parseFloat(el.style.height)||40;
+    const k=el.dataset.kind;
+    mmCtx.fillStyle=k==='sticky'?'#f0e040':k==='image'?'#aac4ee':'#b0c4b0';
+    mmCtx.fillRect((x+ox)*sx,(y+oy)*sy,w*sx,h*sy);
+  });
+  const vpW=vp.offsetWidth/T.s, vpH=vp.offsetHeight/T.s;
+  const vpX=-T.x/T.s, vpY=-T.y/T.s;
+  mmCtx.strokeStyle='#c84b2f'; mmCtx.lineWidth=1.5;
+  mmCtx.strokeRect((vpX+ox)*sx,(vpY+oy)*sy,vpW*sx,vpH*sy);
+}
+
+/* ════════════════════════════════════════════════════════
+   PASTE
+════════════════════════════════════════════════════════ */
+document.addEventListener('paste',e=>{
+  const items=e.clipboardData?.items; if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      const r=new FileReader();
+      r.onload=ev=>{ addImage(ev.target.result); showSnack('이미지 붙여넣기 완료'); };
+      r.readAsDataURL(item.getAsFile());
+    }
+  }
+});
+
+/* ════════════════════════════════════════════════════════
+   SAVE / LOAD
+════════════════════════════════════════════════════════ */
+function getStrokeAttrs(s){
+  const a={};
+  const keys=['d','stroke','stroke-width','fill','x','y','width','height','cx','cy','rx','ry','x1','y1','x2','y2','stroke-linecap','stroke-linejoin'];
+  if(s.svgEl.getAttribute) keys.forEach(k=>{const v=s.svgEl.getAttribute(k);if(v!=null)a[k]=v;});
+  if(s.kind==='arrow'){
+    const ln=s.svgEl.querySelector('line'), pt=s.svgEl.querySelector('path');
+    if(ln){a.x1=ln.getAttribute('x1');a.y1=ln.getAttribute('y1');a.x2=ln.getAttribute('x2');a.y2=ln.getAttribute('y2');a.stroke=ln.getAttribute('stroke');a['stroke-width']=ln.getAttribute('stroke-width');}
+    if(pt) a.d=pt.getAttribute('d');
+  }
+  return a;
+}
+function saveBoard(){
+  const data={version:3,transform:T,strokes:strokes.map(s=>({kind:s.kind,attrs:getStrokeAttrs(s)})),elements:[]};
+  board.querySelectorAll('.el').forEach(el=>{
+    const kind=el.dataset.kind;
+    const rec={kind,x:parseFloat(el.style.left),y:parseFloat(el.style.top),w:parseFloat(el.style.width),h:parseFloat(el.style.height),z:parseInt(el.style.zIndex)||10};
+    if(kind==='sticky'){rec.bg=el.querySelector('.sticky-body').style.background;rec.text=el.querySelector('textarea').value;}
+    else if(kind==='text'){const b=el.querySelector('.text-body');rec.text=b.textContent;rec.color=b.style.color;rec.fontSize=parseFloat(b.style.fontSize);}
+    else if(kind==='image') rec.src=el.querySelector('img').src;
+    data.elements.push(rec);
+  });
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='canvas-'+new Date().toISOString().slice(0,10)+'.canvas'; a.click(); URL.revokeObjectURL(url);
+  showSnack('💾 저장 완료!');
+}
+function loadBoard(evt){
+  const f=evt.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{ try{restoreBoard(JSON.parse(e.target.result));showSnack('📂 불러오기 완료!');}catch(err){showSnack('❌ 파일을 읽을 수 없습니다');} };
+  r.readAsText(f); evt.target.value='';
+}
+function restoreBoard(data){
+  board.querySelectorAll('.el').forEach(e=>e.remove());
+  strokes.forEach(s=>{try{svgl.removeChild(s.svgEl);}catch(e){}});
+  strokes=[]; selected=null; selectedEls=[]; dragging=null; resizing=null;
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  if(data.transform){T=data.transform;applyT();}
+  (data.strokes||[]).forEach(s=>{
+    const{kind,attrs}=s;
+    if(kind==='path'){ const el=mkSvg('path'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='rect'){ const el=mkSvg('rect'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='ellipse'){ const el=mkSvg('ellipse'); setAttrs(el,attrs); svgl.appendChild(el); strokes.push({kind,attrs,svgEl:el}); }
+    else if(kind==='arrow'){
+      const g=mkSvg('g'),ln=mkSvg('line'); setAttrs(ln,{x1:attrs.x1,y1:attrs.y1,x2:attrs.x2,y2:attrs.y2,stroke:attrs.stroke,'stroke-width':attrs['stroke-width'],'stroke-linecap':'round'});
+      const pt=mkSvg('path'); setAttrs(pt,{d:attrs.d,stroke:attrs.stroke,'stroke-width':attrs['stroke-width'],'stroke-linecap':'round',fill:'none'});
+      g.appendChild(ln); g.appendChild(pt); svgl.appendChild(g); strokes.push({kind,attrs,svgEl:g});
+    }
+  });
+  (data.elements||[]).forEach(d=>{
+    let el;
+    if(d.kind==='sticky') el=addSticky({x:d.x,y:d.y,w:d.w,h:d.h,bg:d.bg,text:d.text});
+    else if(d.kind==='text') el=addText({},{x:d.x,y:d.y,w:d.w,h:d.h,text:d.text,color:d.color,fontSize:d.fontSize});
+    else if(d.kind==='image') el=addImage(d.src,{x:d.x,y:d.y,w:d.w,h:d.h});
+    if(el&&d.z) el.style.zIndex=d.z;
+  });
+  updateMinimap();
+}
+
+/* ════════════════════════════════════════════════════════
+   SNACK
+════════════════════════════════════════════════════════ */
+let snackT;
+function showSnack(msg){
+  const s=document.getElementById('snack');
+  s.textContent=msg; s.classList.add('show');
+  clearTimeout(snackT); snackT=setTimeout(()=>s.classList.remove('show'),2200);
+}
+
+/* ════════════════════════════════════════════════════════
+   CLEAR
+════════════════════════════════════════════════════════ */
+function clearAll(){
+  if(!confirm('모든 내용을 삭제할까요?')) return;
+  board.querySelectorAll('.el').forEach(e=>e.remove());
+  strokes.forEach(s=>{try{svgl.removeChild(s.svgEl);}catch(e){}});
+  strokes=[]; selected=null; selectedEls=[];
+  pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  updateMinimap(); showSnack('보드 초기화 완료');
+}
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+// First sync (before adding demo content so positions are correct)
+syncLayout();
+applyT();
+
+// Demo stickies
+addSticky({x:-220,y:-110,bg:'#fff9c4',w:220,h:200,
+  text:'∞ Canvas\n\n마우스 휠/핀치 → 줌\n✋ 이동 툴로 캔버스 이동\n빈 곳 드래그 → 범위 선택\nCtrl+S → 저장'});
+addSticky({x:30,y:-120,bg:'#e3f2fd',w:195,h:235,
+  text:'단축키\nV — 선택\nH — 이동\nP — 펜\nL — 형광펜\nE — 지우개\nS — 포스트잇\nT — 텍스트\nR — 사각형\nC — 원\nA — 화살표\nDel — 삭제\nCtrl+A — 전체선택\nCtrl+D — 복제\nEsc — 해제\nG — 그리드'});
+
+showSnack('∞ Canvas 준비 완료 ✦');
+</script>
+</body>
+</html>
