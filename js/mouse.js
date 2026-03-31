@@ -1,14 +1,24 @@
 // ═══════════════════════════════════════════════════
 //  mouse.js — 마우스 이벤트 핸들링
+//
+//  FIX: 올가미(lasso) 선택 후 마우스를 놓으면 선택이
+//       유지되지 않는 문제 수정
+//  - mouseup에서 finalizeLasso 후 clearLassoHover 명시 호출
+//  - 올가미 종료 후 선택 요소가 있으면 deselectAll 방지
+//  - mousedown에서 올가미 시작 전 기존 lasso 잔여 상태 정리
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { applyT, getVpRect, s2b } from './transform.js';
 import { closeCtx } from './contextMenu.js';
-import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, doResize } from './selection.js';
+import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, clearLassoHover, doResize } from './selection.js';
 import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt } from './drawing.js';
 import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
+
+// 올가미 직후 상태 추적 — mousedown에서 올가미 직후의
+// 빈 공간 클릭을 구분하기 위한 플래그
+let justFinishedLasso = false;
 
 export function initMouseEvents() {
   // Wheel zoom
@@ -44,6 +54,10 @@ export function initMouseEvents() {
     if (S.tool === 'text') { addText(bp); return; }
     if (S.tool === 'select') {
       if (!e.target.closest('.el')) {
+        // 잔여 lasso-hover 정리
+        clearLassoHover();
+
+        // 빈 공간 클릭 → 기존 선택 해제 후 올가미 시작
         deselectAll();
         S.setLasso({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
         showSelRect(S.lasso);
@@ -54,6 +68,9 @@ export function initMouseEvents() {
 
   // Mouse move
   window.addEventListener('mousemove', e => {
+    // 올가미 직후 플래그가 남아있으면 해제
+    justFinishedLasso = false;
+
     if (S.panning) {
       const r = getVpRect();
       S.T.x = e.clientX - r.left - S.panOrigin.x;
@@ -88,7 +105,14 @@ export function initMouseEvents() {
     if (S.panning) { S.setPanning(false); return; }
     if (S.dragging) { S.setDragging(null); updateMinimap(); return; }
     if (S.resizing) { S.setResizing(null); updateMinimap(); return; }
-    if (S.lasso) { finalizeLasso(S.lasso); S.setLasso(null); hideSelRect(); return; }
+    if (S.lasso) {
+      finalizeLasso(S.lasso);
+      clearLassoHover();
+      S.setLasso(null);
+      hideSelRect();
+      justFinishedLasso = true;
+      return;
+    }
     if (!S.drawing) return;
     S.setDrawing(false);
     S.pCtx.clearRect(0, 0, S.pCvs.width, S.pCvs.height);
