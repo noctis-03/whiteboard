@@ -5,6 +5,9 @@
 //  · Orb 위에서 더블클릭+홀드 → 좌우 드래그로 도구 전환
 //  · 드래그 중에는 캔버스 도구 동작 완전 차단
 //  · 손을 때면 해당 도구 확정
+//
+//  UPDATE: 드래그 모드 진입 시 toolbar 확대 애니메이션
+//          선택 예정 표시 디자인 개선
 // ═══════════════════════════════════════════════════
 
 import { tool } from './state.js';
@@ -17,9 +20,9 @@ const OFFSET_Y     = -28;
 const LERP         = 0.15;
 const DRAG_THRESH  = 28;
 const DBLCLICK_MS  = 320;
-const HIDE_DELAY   = 4000;   // 4초 유지 (기존 1.2초 → 대폭 연장)
+const HIDE_DELAY   = 4000;
 
-/* ── 전역 차단 플래그 (외부에서 import하여 확인) ── */
+/* ── 전역 차단 플래그 ── */
 export let orbLock = false;
 
 /* ── 도구 순서 ── */
@@ -68,10 +71,8 @@ export function initToolOrb() {
 
   document.body.appendChild(orb);
 
-  /* ── Orb 자체 이벤트 (pointer-events: all이므로 받을 수 있음) ── */
   orb.addEventListener('pointerdown', onOrbPointerDown);
 
-  /* ── 캔버스 포인터 추적 (Orb 위치 갱신용, capture) ── */
   window.addEventListener('pointerdown', onGlobalDown, true);
   window.addEventListener('pointermove', onGlobalMove, true);
   window.addEventListener('pointerup',   onGlobalUp,   true);
@@ -82,18 +83,16 @@ export function initToolOrb() {
 }
 
 /* ═══════════════════════════════════════════════════
-   Orb 위 포인터 다운 — 더블클릭 판정
+   Orb 위 포인터 다운
 ═══════════════════════════════════════════════════ */
 function onOrbPointerDown(e) {
-  e.stopPropagation();   // 캔버스로 전파 차단
+  e.stopPropagation();
   e.preventDefault();
 
   const now = Date.now();
-
   if (now - orbLastDownTime < DBLCLICK_MS) {
-    // ── 더블클릭+홀드 → 드래그 모드 진입 ──
     activateOrbDrag(e);
-    orbLastDownTime = 0;  // 리셋
+    orbLastDownTime = 0;
   } else {
     orbLastDownTime = now;
   }
@@ -103,7 +102,6 @@ function onOrbPointerDown(e) {
    전역 포인터 이벤트
 ═══════════════════════════════════════════════════ */
 function onGlobalDown(e) {
-  // 드래그 모드 중이면 캔버스 입력 완전 차단
   if (orbActive) {
     if (!orb.contains(e.target)) {
       e.stopPropagation();
@@ -112,7 +110,6 @@ function onGlobalDown(e) {
     return;
   }
 
-  // 툴바/패널 위에서는 Orb 위치 갱신 안 함
   if (e.target.closest('#toolbar') ||
       e.target.closest('#pen-panel') ||
       e.target.closest('#color-bar') ||
@@ -124,18 +121,15 @@ function onGlobalDown(e) {
 }
 
 function onGlobalMove(e) {
-  // 드래그 모드
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
     handleOrbDrag(e);
-    // Orb도 포인터 따라감
     targetX = e.clientX + OFFSET_X;
     targetY = e.clientY + OFFSET_Y;
     return;
   }
 
-  // 일반: 포인터 눌린 상태에서 위치 갱신
   if (e.target.closest('#toolbar') ||
       e.target.closest('#pen-panel') ||
       e.target.closest('#color-bar')) return;
@@ -154,7 +148,6 @@ function onGlobalUp(e) {
     finishOrbDrag();
     return;
   }
-
   scheduleHide(HIDE_DELAY);
 }
 
@@ -163,7 +156,7 @@ function onGlobalUp(e) {
 ═══════════════════════════════════════════════════ */
 function activateOrbDrag(e) {
   orbActive = true;
-  orbLock   = true;           // ★ 전역 차단 ON
+  orbLock   = true;
   orbDragStartX = e.clientX;
   orbSteps = 0;
 
@@ -175,7 +168,13 @@ function activateOrbDrag(e) {
   orb.classList.add('orb-active');
   updateLabel(tool);
 
-  // 숨김 타이머 취소
+  // ★ 도구창 확대 애니메이션 — 클래스 추가
+  const tb = document.getElementById('toolbar');
+  if (tb) tb.classList.add('tb-orb-zoom');
+
+  // 현재 활성 버튼에 미리보기 표시
+  previewToolHighlight(tool);
+
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
 }
 
@@ -201,8 +200,12 @@ function handleOrbDrag(e) {
 function finishOrbDrag() {
   if (!orbActive) return;
   orbActive = false;
-  orbLock   = false;          // ★ 전역 차단 OFF
+  orbLock   = false;
   orb.classList.remove('orb-active');
+
+  // ★ 도구창 확대 해제
+  const tb = document.getElementById('toolbar');
+  if (tb) tb.classList.remove('tb-orb-zoom');
 
   if (orbPreviewTool && orbPreviewTool !== tool) {
     setTool(orbPreviewTool);
@@ -246,7 +249,7 @@ function showOrb() {
 function scheduleHide(ms) {
   if (hideTimer) clearTimeout(hideTimer);
   hideTimer = setTimeout(() => {
-    if (orbActive) return;     // 드래그 중이면 숨기지 않음
+    if (orbActive) return;
     visible = false;
     orb.classList.remove('orb-visible');
     hideTimer = null;
