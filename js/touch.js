@@ -1,17 +1,18 @@
 // ═══════════════════════════════════════════════════
 //  touch.js — 터치 이벤트 (1-finger, 핀치줌)
 //
-//  ADD: 편집(edit) 도구 터치 지원
+//  UPDATE: 드래그/리사이즈/지우개 완료 시 pushState() 호출
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
 import { applyT, getVpRect, s2b } from './transform.js';
 import { closeCtx, startLongPress, cancelLongPress } from './contextMenu.js';
 import { deselectAll, showSelRect, highlightLasso, finalizeLasso, hideSelRect, clearLassoHover, doResize } from './selection.js';
-import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt } from './drawing.js';
+import { startDraw, continueDraw, commitFreehandStroke, previewShape, finalizeShape, eraseAt, commitErase } from './drawing.js';
 import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
 import { focusEditableTouch } from './edit.js';
+import { pushState } from './history.js';
 
 function cancelSingleFingerActions() {
   if (S.drawing) {
@@ -55,14 +56,13 @@ export function initTouchEvents() {
     if (S.tool === 'pen' || S.tool === 'highlight') { startDraw(bp); e.preventDefault(); return; }
     if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(bp); e.preventDefault(); return; }
     if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); e.preventDefault(); return; }
-    if (S.tool === 'text') { addText(bp); e.preventDefault(); return; }
+    if (S.tool === 'text') { addText(bp); pushState(); e.preventDefault(); return; }
 
     // ── 편집 도구 터치 ──
     if (S.tool === 'edit') {
       const elDiv = e.target.closest('.el');
       if (elDiv) {
         focusEditableTouch(elDiv, t);
-        // preventDefault 하지 않음 — 키보드가 올라와야 함
       } else {
         const active = document.activeElement;
         if (active && active !== document.body) active.blur();
@@ -108,7 +108,7 @@ export function initTouchEvents() {
     cancelLongPress();
     const t = e.touches[0];
 
-    // edit 도구에서는 터치 드래그 무시 (텍스트 선택 허용)
+    // edit 도구에서는 터치 드래그 무시
     if (S.tool === 'edit') return;
 
     if (S.touchPanOrigin) {
@@ -143,14 +143,15 @@ export function initTouchEvents() {
 
     if (e.touches.length === 0 && S.pinchActive) { S.setPinchActive(false); S.setPinchDist(null); S.setPinchMid(null); }
     if (S.touchPanOrigin) { S.setTouchPanOrigin(null); return; }
-    if (S.dragging) { S.setDragging(null); updateMinimap(); return; }
-    if (S.resizing) { S.setResizing(null); updateMinimap(); return; }
+    if (S.dragging) { S.setDragging(null); updateMinimap(); pushState(); return; }
+    if (S.resizing) { S.setResizing(null); updateMinimap(); pushState(); return; }
     if (S.touchLasso) { finalizeLasso(S.touchLasso); S.setTouchLasso(null); hideSelRect(); clearLassoHover(); return; }
     if (!S.drawing) return;
     S.setDrawing(false);
     S.pCtx.clearRect(0, 0, S.pCvs.width, S.pCvs.height);
     const lastT = e.changedTouches[0];
     if (S.tool === 'pen' || S.tool === 'highlight') commitFreehandStroke();
+    if (S.tool === 'eraser') commitErase();
     if ((S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') && S.shapeA) {
       if (lastT) {
         const bp = s2b(lastT.clientX, lastT.clientY);
