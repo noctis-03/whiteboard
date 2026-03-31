@@ -1,5 +1,8 @@
 // ═══════════════════════════════════════════════════
 //  startup.js — 시작 윈도우 & 단축키 윈도우 & 최근 파일
+//
+//  FIX: 파일 불러오기 / 최근 사용한 파일 / 단축키 보기 클릭 시
+//       시작 윈도우가 사라지지 않도록 수정
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -17,14 +20,12 @@ export function getRecentFiles() {
 
 export function addRecentFile(name, data) {
   const list = getRecentFiles();
-  // 같은 이름 제거 후 맨 앞에 추가
   const filtered = list.filter(f => f.name !== name);
   filtered.unshift({
     name,
     date: new Date().toISOString(),
     data: JSON.stringify(data)
   });
-  // 최대 개수 제한
   while (filtered.length > MAX_RECENT) filtered.pop();
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(filtered)); } catch { /* ignore */ }
 }
@@ -51,7 +52,6 @@ function makeDraggableHeader(win, header) {
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
 
-  // 터치 드래그
   header.addEventListener('touchstart', e => {
     if (e.target.tagName === 'BUTTON') return;
     if (e.touches.length !== 1) return;
@@ -103,27 +103,29 @@ export function createStartupWindow() {
 
   S.board.appendChild(win);
 
+  // 닫기
   const closeBtn = win.querySelector('.start-window-close');
   onTap(closeBtn, () => win.remove());
 
+  // 새 캔버스 — 시작 윈도우만 닫음
   const newBtn = win.querySelector('[data-sw-action="new"]');
   onTap(newBtn, () => win.remove());
 
+  // 파일 불러오기 — 시작 윈도우 유지, 파일 선택 다이얼로그만 열림
   const loadBtn = win.querySelector('[data-sw-action="load-file"]');
   onTap(loadBtn, () => {
-    win.remove();
     document.getElementById('load-in').click();
   });
 
+  // 최근 사용한 파일 — 시작 윈도우 유지, 최근 파일 윈도우 추가로 열림
   const recentBtn = win.querySelector('[data-sw-action="recent"]');
   onTap(recentBtn, () => {
-    win.remove();
     createRecentFilesWindow();
   });
 
+  // 단축키 보기 — 시작 윈도우 유지, 단축키 윈도우 추가로 열림
   const shortcutBtn = win.querySelector('[data-sw-action="shortcuts"]');
   onTap(shortcutBtn, () => {
-    win.remove();
     createShortcutWindow();
   });
 
@@ -132,13 +134,12 @@ export function createStartupWindow() {
 
 // ── 단축키 윈도우 ──
 export function createShortcutWindow() {
-  // 이미 열려 있으면 제거
   document.querySelectorAll('.shortcut-window').forEach(el => el.remove());
 
   const vr = S.vp.getBoundingClientRect();
   const w = 320, h = 440;
-  const x = (vr.width - w) / 2 / S.T.s;
-  const y = (vr.height - h) / 2 / S.T.s;
+  const x = (vr.width - w) / 2 / S.T.s + 30;
+  const y = (vr.height - h) / 2 / S.T.s + 20;
 
   const win = document.createElement('div');
   win.className = 'start-window shortcut-window';
@@ -203,8 +204,8 @@ export function createRecentFilesWindow() {
 
   const vr = S.vp.getBoundingClientRect();
   const w = 340, h = 400;
-  const x = (vr.width - w) / 2 / S.T.s;
-  const y = (vr.height - h) / 2 / S.T.s;
+  const x = (vr.width - w) / 2 / S.T.s + 30;
+  const y = (vr.height - h) / 2 / S.T.s + 20;
 
   const win = document.createElement('div');
   win.className = 'start-window recent-window';
@@ -229,7 +230,6 @@ export function createRecentFilesWindow() {
 
   makeDraggableHeader(win, win.querySelector('.start-window-header'));
 
-  // 최근 파일 목록 렌더링
   renderRecentList(win);
 }
 
@@ -267,10 +267,11 @@ function renderRecentList(win) {
     onTap(openBtn, () => {
       try {
         const data = JSON.parse(file.data);
-        // persistence.js의 restoreBoard를 동적 import로 호출
         import('./persistence.js').then(mod => {
           mod.restoreBoard(data);
           win.remove();
+          // 시작 윈도우도 같이 닫기
+          document.querySelectorAll('.start-window').forEach(sw => sw.remove());
         });
       } catch {
         alert('파일을 열 수 없습니다.');
