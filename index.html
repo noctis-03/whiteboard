@@ -10,6 +10,9 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&display=swap');
 
+/* ══════════════════════════════════════════
+   ROOT TOKENS
+══════════════════════════════════════════ */
 :root {
   --bg:#f5f2eb; --grid:#d8d3c8; --ink:#1a1714;
   --panel:#faf8f4; --border:#c8c3b8; --shadow:rgba(26,23,20,0.14);
@@ -501,12 +504,13 @@ body[data-tool="select"] #viewport{cursor:default;}
 
 <canvas id="minimap" width="130" height="84"></canvas>
 
-<!-- PEN SETTINGS PANEL -->
+<!-- ══ PEN SETTINGS PANEL ══ -->
 <div id="pen-panel">
   <div class="pp-title">
     <span id="pp-title-txt">✏️ 펜 설정</span>
     <button class="pp-x" onclick="closePenPanel()">✕</button>
   </div>
+
   <div class="pp-sect">
     <div class="pp-lbl">펜 안정화 (smoothing)</div>
     <div class="pp-row">
@@ -520,6 +524,7 @@ body[data-tool="select"] #viewport{cursor:default;}
       <button class="pp-chip"       onclick="setPPSmooth(18,this)">강함</button>
     </div>
   </div>
+
   <div class="pp-sect">
     <div class="pp-lbl">불투명도 (opacity)</div>
     <div class="pp-row">
@@ -527,6 +532,7 @@ body[data-tool="select"] #viewport{cursor:default;}
       <span class="pp-num" id="pp-opacity-v">100%</span>
     </div>
   </div>
+
   <div class="pp-sect" id="pp-cap-sect">
     <div class="pp-lbl">선 끝 모양 (linecap)</div>
     <div class="pp-caps">
@@ -544,6 +550,7 @@ body[data-tool="select"] #viewport{cursor:default;}
       </button>
     </div>
   </div>
+
   <div class="pp-sect" id="pp-pressure-sect">
     <div class="pp-lbl">끝 처리 (taper)</div>
     <div class="pp-chips" id="pp-pc">
@@ -553,6 +560,7 @@ body[data-tool="select"] #viewport{cursor:default;}
       <button class="pp-chip"       data-pressure="both"  onclick="setPPPressure(this)">양쪽</button>
     </div>
   </div>
+
   <div class="pp-sect">
     <div class="pp-lbl">미리보기</div>
     <div id="pp-preview-wrap">
@@ -566,7 +574,7 @@ body[data-tool="select"] #viewport{cursor:default;}
   </div>
 </div>
 
-<!-- TOOLBAR -->
+<!-- ══ TOOLBAR ══ -->
 <div id="toolbar">
   <div id="toolbar-fixed">
     <button class="tbtn active" id="t-select" data-tip="선택 (V)" onclick="setTool('select')">⊹</button>
@@ -727,6 +735,7 @@ function setToolOrPanel(t){
    PEN SETTINGS PANEL
 ════════════════════════════════════════════════════════ */
 function togglePenPanel(t){
+  const pp=document.getElementById('pen-panel');
   if(penPanelOpen){ closePenPanel(); return; }
   openPenPanel(t);
 }
@@ -1271,10 +1280,11 @@ function attachSelectClick(el){
 
 /* ════════════════════════════════════════════════════════
    TOUCH EVENTS (global — pan / draw / lasso)
+   ★ 1-finger: tool action (draw, lasso, etc.)
 ════════════════════════════════════════════════════════ */
 vp.addEventListener('touchstart',e=>{
   cancelLongPress();
-  if(e.touches.length===2) return; // pinch handled separately
+  if(e.touches.length===2) return; // pinch handled separately below
   if(e.touches.length!==1) return;
   const t=e.touches[0];
   closeCtx();
@@ -1312,7 +1322,7 @@ vp.addEventListener('touchstart',e=>{
 },{passive:false});
 
 window.addEventListener('touchmove',e=>{
-  if(e.touches.length===2) return; // pinch handled separately
+  if(e.touches.length===2) return; // handled by pinch handler
   if(e.touches.length!==1) return;
   cancelLongPress();
   const t=e.touches[0];
@@ -1358,73 +1368,93 @@ window.addEventListener('touchend',e=>{
 });
 
 /* ════════════════════════════════════════════════════════
-   PINCH ZOOM + PAN (two-finger) ★ UPDATED
+   ★ PINCH ZOOM + TWO-FINGER PAN (UPDATED)
+   ─────────────────────────────────────────────────────
+   Two fingers:
+     • distance change → zoom (pinch)
+     • midpoint change → pan  (two-finger drag)
+   Both happen simultaneously for a natural feel.
 ════════════════════════════════════════════════════════ */
-let ltDist=null;
-let ltMid=null;
-let pinching=false;
+let pinchDist  = null;   // distance between two fingers
+let pinchMid   = null;   // {x, y} midpoint of two fingers (screen coords)
+let pinchActive = false; // true while a two-finger gesture is in progress
+
+/* Cancel any single-finger action that was in progress when a second
+   finger lands, so drawing/lasso don't interfere with pan/zoom.       */
+function cancelSingleFingerActions(){
+  // Abort drawing
+  if(drawing){
+    drawing=false;
+    if(livePth && livePth.parentNode) svgl.removeChild(livePth);
+    livePth=null; drawPts=[]; shapeA=null;
+    pCtx.clearRect(0,0,pCvs.width,pCvs.height);
+  }
+  // Abort lasso
+  if(touchLasso){ touchLasso=null; hideSelRect(); }
+  // Abort single-finger pan
+  if(touchPanOrigin){ touchPanOrigin=null; document.body.classList.remove('panning'); }
+  // Abort element drag / resize
+  if(dragging) dragging=null;
+  if(resizing) resizing=null;
+  cancelLongPress();
+}
 
 vp.addEventListener('touchstart',e=>{
   if(e.touches.length===2){
+    cancelSingleFingerActions();
+
     const t0=e.touches[0], t1=e.touches[1];
-    ltDist=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
-    ltMid={x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2};
-    pinching=true;
-
-    // Cancel any ongoing single-touch action
-    drawing=false;
-    if(livePth && livePth.parentNode){ svgl.removeChild(livePth); livePth=null; }
-    drawPts=[];
-    shapeA=null;
-    touchPanOrigin=null;
-    if(touchLasso){ hideSelRect(); touchLasso=null; }
-    cancelLongPress();
-    pCtx.clearRect(0,0,pCvs.width,pCvs.height);
-  }
-},{passive:true});
-
-vp.addEventListener('touchmove',e=>{
-  if(e.touches.length===2){
+    pinchDist = Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+    pinchMid  = { x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2 };
+    pinchActive = true;
     e.preventDefault();
-    const t0=e.touches[0], t1=e.touches[1];
-    const d=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
-    const mid={x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2};
-
-    if(ltDist && ltMid){
-      // Zoom
-      const ns=Math.min(8, Math.max(0.08, T.s*(d/ltDist)));
-      const r=getVpRect();
-      const mx=mid.x-r.left, my=mid.y-r.top;
-
-      // Zoom around midpoint
-      T.x = mx-(mx-T.x)*(ns/T.s);
-      T.y = my-(my-T.y)*(ns/T.s);
-      T.s = ns;
-
-      // Pan: add midpoint delta
-      T.x += mid.x - ltMid.x;
-      T.y += mid.y - ltMid.y;
-
-      applyT();
-    }
-
-    ltDist=d;
-    ltMid=mid;
   }
 },{passive:false});
 
-window.addEventListener('touchend',e=>{
-  if(e.touches.length<2){
-    ltDist=null;
-    ltMid=null;
-    pinching=false;
+vp.addEventListener('touchmove',e=>{
+  if(e.touches.length===2 && pinchActive){
+    e.preventDefault();
+    const t0=e.touches[0], t1=e.touches[1];
+
+    const newDist = Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+    const newMid  = { x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2 };
+
+    /* ── Pan: translate by midpoint delta ── */
+    if(pinchMid){
+      const dx = newMid.x - pinchMid.x;
+      const dy = newMid.y - pinchMid.y;
+      T.x += dx;
+      T.y += dy;
+    }
+
+    /* ── Zoom: scale around current midpoint ── */
+    if(pinchDist && pinchDist>0){
+      const ratio = newDist / pinchDist;
+      const ns = Math.min(8, Math.max(0.08, T.s * ratio));
+      const r = getVpRect();
+      const mx = newMid.x - r.left;
+      const my = newMid.y - r.top;
+      T.x = mx - (mx - T.x) * (ns / T.s);
+      T.y = my - (my - T.y) * (ns / T.s);
+      T.s = ns;
+    }
+
+    pinchDist = newDist;
+    pinchMid  = newMid;
+    applyT();
   }
+},{passive:false});
+
+/* Reset pinch state when fingers lift */
+function resetPinchState(){
+  pinchDist = null;
+  pinchMid  = null;
+  pinchActive = false;
+}
+window.addEventListener('touchend', e=>{
+  if(e.touches.length < 2) resetPinchState();
 });
-window.addEventListener('touchcancel',()=>{
-  ltDist=null;
-  ltMid=null;
-  pinching=false;
-});
+window.addEventListener('touchcancel', resetPinchState);
 
 /* ════════════════════════════════════════════════════════
    STICKY
@@ -1890,7 +1920,9 @@ function clearAll(){
 ════════════════════════════════════════════════════════ */
 syncLayout();
 applyT();
+
 ensureStartupWindows();
+
 showSnack('∞ Canvas 준비 완료 ✦');
 </script>
 </body>
