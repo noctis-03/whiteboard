@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════
 //  elements.js — DOM 요소 생성, 핸들, 이벤트 바인딩
 //
-//  FIX: Shift/Ctrl 클릭으로 다중 선택이 안 되던 문제 수정
-//  원인: attachSelectClick에서 additive 모드에서
-//        deselectAll()이 불필요하게 호출됨
+//  FIX: 다중 선택 안 되는 문제 수정
+//  - attachSelectClick의 mousedown에서 이벤트 버블링 차단 강화
+//  - 일반 클릭 시에도 select(el) 호출 전에 불필요한 deselectAll 제거
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -62,18 +62,22 @@ export function addHandles(el) {
 export function attachSelectClick(el) {
   el.addEventListener('mousedown', e => {
     if (S.tool !== 'select') return;
-    e.stopPropagation();
+    e.stopPropagation();  // viewport mousedown으로 버블링 차단 (lasso 시작 방지)
+
     const additive = e.shiftKey || e.metaKey || e.ctrlKey;
 
     if (additive) {
       // Shift/Ctrl: 기존 선택 유지하면서 추가/토글
       select(el, true);
     } else {
-      // 일반 클릭: 이미 선택된 요소가 아니면 전체 해제 후 단일 선택
+      // 일반 클릭:
+      // 이미 선택된 요소 중 하나를 클릭한 경우 → 선택 유지 (드래그 준비)
+      // 새 요소를 클릭한 경우 → 기존 선택 해제 후 단일 선택
       if (!S.selectedEls.includes(el)) {
         deselectAll();
+        select(el);
       }
-      select(el, false);
+      // 이미 선택된 요소를 클릭한 경우 select 재호출 불필요 — 그대로 유지
     }
 
     el.style.zIndex = S.nextZ();
@@ -95,8 +99,13 @@ export function attachSelectClick(el) {
     e.stopPropagation();
     const t = e.touches[0];
     startLongPress(e.target, t.clientX, t.clientY);
-    if (!S.selectedEls.includes(el)) deselectAll();
-    select(el, false);
+
+    // 터치에서도 동일한 로직: 이미 선택된 요소면 유지
+    if (!S.selectedEls.includes(el)) {
+      deselectAll();
+      select(el);
+    }
+
     el.style.zIndex = S.nextZ();
     const bp = s2b(t.clientX, t.clientY);
     if (S.selectedEls.length > 1) {
@@ -114,6 +123,7 @@ export function duplicateEl(el) {
   clone.style.top = (parseFloat(el.style.top) + 20) + 'px';
   clone.style.zIndex = S.nextZ();
   clone.classList.remove('selected');
+  // 기존 핸들 제거 후 새로 생성
   const oldHandles = clone.querySelector('.el-handles');
   if (oldHandles) oldHandles.remove();
   S.board.appendChild(clone);
