@@ -520,10 +520,14 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
    선택 예정(미리보기) 표시 — 리디자인
 ══════════════════════════════════════════════════════ */
 
-/* ★ zoom 모드에서도 가로 스크롤은 유지, 세로만 visible로 풀어 버튼 잘림 방지 */
+/* ★ zoom 모드: toolbar와 tb-tools 모두 overflow visible로 풀어
+   scaled preview 버튼이 위아래로 잘리지 않게 함.
+   가로 스크롤은 JS(scrollLeft)로 직접 제어. */
+#toolbar.tb-orb-zoom {
+  overflow: visible;
+}
 #toolbar.tb-orb-zoom #tb-tools {
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
 }
 
 .tbtn.orb-preview {
