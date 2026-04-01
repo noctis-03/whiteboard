@@ -9,11 +9,11 @@
 //  · 꾹 누르기/더블탭 (Orb 위) → 좌우 드래그로 도구 전환
 // ╔══════════════════════════════════════════════════════════╗
 
-import { tool, pendingTool } from './state.js';
-import { setTool, activatePending, revertToPan } from './tools.js';
+import { tool, pendingTool } from ‘./state.js’;
+import { setTool, activatePending, revertToPan } from ‘./tools.js’;
 
 /* ── Orb를 표시하지 않을 도구 목록 (text/edit, pan, select/lasso) ── */
-const NO_ORB_TOOLS = new Set(['text', 'edit', 'pan', 'select']);
+const NO_ORB_TOOLS = new Set([‘text’, ‘edit’, ‘pan’, ‘select’]);
 
 /* ── 설정 ── */
 const ORB_SIZE     = 36;
@@ -38,15 +38,15 @@ export let toolActivated = false;
 
 /* ── 도구 순서 (Orb 드래그 전환용 — no-orb 도구 제외) ── */
 function getToolOrder() {
-  const btns = document.querySelectorAll(
-    '#tb-tools .tbtn[data-tool], #tb-tools .tbtn[data-tool-or-panel]'
-  );
-  const order = [];
-  btns.forEach(btn => {
-    const t = btn.dataset.tool || btn.dataset.toolOrPanel;
-    if (t && !order.includes(t) && !NO_ORB_TOOLS.has(t)) order.push(t);
-  });
-  return order;
+const btns = document.querySelectorAll(
+‘#tb-tools .tbtn[data-tool], #tb-tools .tbtn[data-tool-or-panel]’
+);
+const order = [];
+btns.forEach(btn => {
+const t = btn.dataset.tool || btn.dataset.toolOrPanel;
+if (t && !order.includes(t) && !NO_ORB_TOOLS.has(t)) order.push(t);
+});
+return order;
 }
 
 /* ── DOM ── */
@@ -78,7 +78,7 @@ let orbActive      = false;
 let orbDragStartX  = 0;
 let orbSteps       = 0;
 let orbBaseIdx     = 0;
-let orbPreviewTool = '';
+let orbPreviewTool = ‘’;
 
 /* ── ★ 화면 탭 감지용 상태 ── */
 let screenTapStartX = 0;
@@ -87,449 +87,464 @@ let screenTapStartTime = 0;
 let screenTapTracking = false;
 
 /* ╔══════════════════════════════════════════════════════════╗
-   외부에서 호출: 도구 변경 알림 (tools.js → toolOrb.js)
-   ╚══════════════════════════════════════════════════════════╝ */
+외부에서 호출: 도구 변경 알림 (tools.js → toolOrb.js)
+╚══════════════════════════════════════════════════════════╝ */
 export function notifyToolChanged(t) {
-  updateLabel(t);
-  // 도구 전환 시 활성화 상태 완전 초기화
-  toolActivated = false;
-  if (orb) orb.classList.remove('orb-tool-active');
-  // Orb가 불필요한 도구로 전환되면 즉시 숨김
-  if (NO_ORB_TOOLS.has(t)) {
-    hideOrbNow();
-  }
+updateLabel(t);
+// 도구 전환 시 활성화 상태 완전 초기화
+toolActivated = false;
+if (orb) orb.classList.remove(‘orb-tool-active’);
+// Orb가 불필요한 도구로 전환되면 즉시 숨김
+if (NO_ORB_TOOLS.has(t)) {
+hideOrbNow();
+}
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   ★ 외부에서 호출: 화면 탭으로 도구 활성화 시도
-      (touch.js의 touchstart에서 호출)
-      true를 반환하면 도구가 활성화됨 → touch.js에서 도구 동작 시작
-      false를 반환하면 활성화 안 됨 → pan 동작
-   ╚══════════════════════════════════════════════════════════╝ */
+★ 외부에서 호출: 화면 탭으로 도구 활성화 시도
+(touch.js의 touchstart에서 호출)
+true를 반환하면 도구가 활성화됨 → touch.js에서 도구 동작 시작
+false를 반환하면 활성화 안 됨 → pan 동작
+╚══════════════════════════════════════════════════════════╝ */
 export function tryActivateByTap() {
-  if (!pendingTool) return false;
-  if (toolActivated) return true; // 이미 활성화 상태
+if (!pendingTool) return false;
+if (toolActivated) return true; // 이미 활성화 상태
 
-  // 활성화!
-  activatePending();
-  toolActivated = true;
-  if (orb) orb.classList.add('orb-tool-active');
-  // 도구를 사용하지 않아도 Orb가 사라지도록 타이머 유지
-  scheduleHide(HIDE_DELAY);
-  return true;
+// 활성화!
+activatePending();
+toolActivated = true;
+if (orb) orb.classList.add(‘orb-tool-active’);
+// 도구를 사용하지 않아도 Orb가 사라지도록 타이머 유지
+scheduleHide(HIDE_DELAY);
+return true;
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   ★ 외부에서 호출: 화면 탭이 아닌 것으로 판명 (드래그 시작)
-      → 도구 활성화 취소, pan 유지
-   ╚══════════════════════════════════════════════════════════╝ */
+★ 외부에서 호출: 화면 탭이 아닌 것으로 판명 (드래그 시작)
+→ 도구 활성화 취소, pan 유지
+╚══════════════════════════════════════════════════════════╝ */
 export function cancelTapActivation() {
-  // 이번 터치에서 도구가 활성화됐지만 아직 그리기 시작 전이면 취소
-  // (실제로는 touch.js에서 드래그로 판명 시 호출)
+// 이번 터치에서 도구가 활성화됐지만 아직 그리기 시작 전이면 취소
+// (실제로는 touch.js에서 드래그로 판명 시 호출)
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   초기화
-   ╚══════════════════════════════════════════════════════════╝ */
+초기화
+╚══════════════════════════════════════════════════════════╝ */
 export function initToolOrb() {
-  orb = document.createElement('div');
-  orb.id = 'tool-orb';
-  orb.setAttribute('aria-hidden', 'true');
+orb = document.createElement(‘div’);
+orb.id = ‘tool-orb’;
+orb.setAttribute(‘aria-hidden’, ‘true’);
 
-  orbLabel = document.createElement('span');
-  orbLabel.id = 'tool-orb-label';
-  orb.appendChild(orbLabel);
+orbLabel = document.createElement(‘span’);
+orbLabel.id = ‘tool-orb-label’;
+orb.appendChild(orbLabel);
 
-  document.body.appendChild(orb);
+document.body.appendChild(orb);
 
-  orb.addEventListener('pointerdown', onOrbPointerDown);
+orb.addEventListener(‘pointerdown’, onOrbPointerDown);
 
-  window.addEventListener('pointerdown', onGlobalDown, true);
-  window.addEventListener('pointermove', onGlobalMove, true);
-  window.addEventListener('pointerup',   onGlobalUp,   true);
-  window.addEventListener('pointercancel', onGlobalUp,  true);
+window.addEventListener(‘pointerdown’, onGlobalDown, true);
+window.addEventListener(‘pointermove’, onGlobalMove, true);
+window.addEventListener(‘pointerup’,   onGlobalUp,   true);
+window.addEventListener(‘pointercancel’, onGlobalUp,  true);
 
-  animLoop();
-  updateLabel(tool);
+animLoop();
+updateLabel(tool);
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   Orb 위 포인터 다운
-   ╚══════════════════════════════════════════════════════════╝ */
+Orb 위 포인터 다운
+╚══════════════════════════════════════════════════════════╝ */
 function onOrbPointerDown(e) {
-  e.stopPropagation();
-  e.preventDefault();
+e.stopPropagation();
+e.preventDefault();
 
-  const now = Date.now();
+const now = Date.now();
 
-  // ── 더블탭 판정 → 도구 전환 드래그 모드 ──
-  if (now - orbLastDownTime < DBLCLICK_MS) {
-    cancelOrbLongPress();
-    cancelOrbHold();
-    activateOrbDrag(e);
-    orbLastDownTime = 0;
-    return;
-  }
+// ── 더블탭 판정 → 도구 전환 드래그 모드 ──
+if (now - orbLastDownTime < DBLCLICK_MS) {
+cancelOrbLongPress();
+cancelOrbHold();
+activateOrbDrag(e);
+orbLastDownTime = 0;
+return;
+}
 
-  orbLastDownTime = now;
+orbLastDownTime = now;
 
-  // ── 홀드 상태 시작 ──
-  orbHolding = true;
-  orbRelocating = false;
-  orbHoldStartX = e.clientX;
-  orbHoldStartY = e.clientY;
-  orbHoldOrbStartX = currentX;
-  orbHoldOrbStartY = currentY;
-  orbHoldPointerId = e.pointerId;
+// ── 홀드 상태 시작 ──
+orbHolding = true;
+orbRelocating = false;
+orbHoldStartX = e.clientX;
+orbHoldStartY = e.clientY;
+orbHoldOrbStartX = currentX;
+orbHoldOrbStartY = currentY;
+orbHoldPointerId = e.pointerId;
 
-  try { orb.setPointerCapture(e.pointerId); } catch (_) {}
+try { orb.setPointerCapture(e.pointerId); } catch (_) {}
 
-  // ── long press 타이머 → 도구 전환 드래그 모드 ──
-  cancelOrbLongPress();
-  orbLongPressTimer = setTimeout(() => {
-    orbLongPressTimer = null;
-    if (orbHolding && !orbRelocating) {
-      orbHolding = false;
-      activateOrbDrag(e);
-      orbLastDownTime = 0;
-    }
-  }, LONGPRESS_MS);
+// ── long press 타이머 → 도구 전환 드래그 모드 ──
+cancelOrbLongPress();
+orbLongPressTimer = setTimeout(() => {
+orbLongPressTimer = null;
+if (orbHolding && !orbRelocating) {
+orbHolding = false;
+activateOrbDrag(e);
+orbLastDownTime = 0;
+}
+}, LONGPRESS_MS);
 }
 
 /* ── long press 타이머 취소 ── */
 function cancelOrbLongPress() {
-  if (orbLongPressTimer) {
-    clearTimeout(orbLongPressTimer);
-    orbLongPressTimer = null;
-  }
+if (orbLongPressTimer) {
+clearTimeout(orbLongPressTimer);
+orbLongPressTimer = null;
+}
 }
 
 /* ── 홀드 상태 초기화 ── */
 function cancelOrbHold() {
-  orbHolding = false;
-  orbRelocating = false;
-  orbHoldPointerId = null;
+orbHolding = false;
+orbRelocating = false;
+orbHoldPointerId = null;
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   전역 포인터 이벤트
-   ╚══════════════════════════════════════════════════════════╝ */
+전역 포인터 이벤트
+╚══════════════════════════════════════════════════════════╝ */
 function onGlobalDown(e) {
-  if (orbActive) {
-    if (!orb.contains(e.target)) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    return;
-  }
+if (orbActive) {
+if (!orb.contains(e.target)) {
+e.stopPropagation();
+e.preventDefault();
+}
+return;
+}
 
-  if (e.target.closest('#toolbar') ||
-      e.target.closest('#pen-panel') ||
-      e.target.closest('#color-bar') ||
-      orb.contains(e.target)) return;
+if (e.target.closest(’#toolbar’) ||
+e.target.closest(’#pen-panel’) ||
+e.target.closest(’#color-bar’) ||
+orb.contains(e.target)) return;
 
-  // Orb가 필요 없는 도구일 때는 표시하지 않음
-  const activeTool = pendingTool || tool;
-  if (NO_ORB_TOOLS.has(activeTool)) return;
+// Orb가 필요 없는 도구일 때는 표시하지 않음
+const activeTool = pendingTool || tool;
+if (NO_ORB_TOOLS.has(activeTool)) return;
 
-  targetX = e.clientX + OFFSET_X;
-  targetY = e.clientY + OFFSET_Y;
-  showOrb();
+targetX = e.clientX + OFFSET_X;
+targetY = e.clientY + OFFSET_Y;
+showOrb();
 }
 
 function onGlobalMove(e) {
-  if (orbActive) {
-    e.stopPropagation();
-    e.preventDefault();
-    handleOrbDrag(e);
-    targetX = e.clientX + OFFSET_X;
-    targetY = e.clientY + OFFSET_Y;
-    return;
-  }
+if (orbActive) {
+e.stopPropagation();
+e.preventDefault();
+handleOrbDrag(e);
+targetX = e.clientX + OFFSET_X;
+targetY = e.clientY + OFFSET_Y;
+return;
+}
 
-  if (orbHolding || orbRelocating) {
-    e.stopPropagation();
-    e.preventDefault();
+if (orbHolding || orbRelocating) {
+e.stopPropagation();
+e.preventDefault();
 
-    const dx = e.clientX - orbHoldStartX;
-    const dy = e.clientY - orbHoldStartY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+```
+const dx = e.clientX - orbHoldStartX;
+const dy = e.clientY - orbHoldStartY;
+const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (!orbRelocating && dist > MOVE_CANCEL_DIST) {
-      cancelOrbLongPress();
-      orbRelocating = true;
-    }
+if (!orbRelocating && dist > MOVE_CANCEL_DIST) {
+  cancelOrbLongPress();
+  orbRelocating = true;
+}
 
-    if (orbRelocating) {
-      const newX = orbHoldOrbStartX + dx;
-      const newY = orbHoldOrbStartY + dy;
-      targetX = newX;
-      targetY = newY;
-      currentX = newX;
-      currentY = newY;
-      applyPosition();
-    }
-    return;
-  }
+if (orbRelocating) {
+  const newX = orbHoldOrbStartX + dx;
+  const newY = orbHoldOrbStartY + dy;
+  targetX = newX;
+  targetY = newY;
+  currentX = newX;
+  currentY = newY;
+  applyPosition();
+}
+return;
+```
 
-  if (e.target.closest('#toolbar') ||
-      e.target.closest('#pen-panel') ||
-      e.target.closest('#color-bar') ||
-      orb.contains(e.target)) return;
+}
 
-  if (e.buttons > 0 || e.pointerType === 'touch') {
-    const activeTool = pendingTool || tool;
-    if (NO_ORB_TOOLS.has(activeTool)) return;
-    targetX = e.clientX + OFFSET_X;
-    targetY = e.clientY + OFFSET_Y;
-    showOrb();
-  }
+if (e.target.closest(’#toolbar’) ||
+e.target.closest(’#pen-panel’) ||
+e.target.closest(’#color-bar’) ||
+orb.contains(e.target)) return;
+
+if (e.buttons > 0 || e.pointerType === ‘touch’) {
+const activeTool = pendingTool || tool;
+if (NO_ORB_TOOLS.has(activeTool)) return;
+targetX = e.clientX + OFFSET_X;
+targetY = e.clientY + OFFSET_Y;
+showOrb();
+}
 }
 
 function onGlobalUp(e) {
-  cancelOrbLongPress();
+cancelOrbLongPress();
 
-  if (orbActive) {
-    e.stopPropagation();
-    e.preventDefault();
-    finishOrbDrag();
-    cancelOrbHold();
-    return;
-  }
+if (orbActive) {
+e.stopPropagation();
+e.preventDefault();
+finishOrbDrag();
+cancelOrbHold();
+return;
+}
 
-  // ── Orb 위에서 손 뗌 (홀드 중, 위치 이동 아님) → Orb 탭 (도구 전환용은 아님) ──
-  if (orbHolding && !orbRelocating) {
-    try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
-    orbHolding = false;
-    orbHoldPointerId = null;
-    // Orb 탭은 이제 도구 활성화에 사용하지 않음 (화면 탭이 대신함)
-    // 대신 Orb 탭 → 아무 동작 없음 (또는 향후 기능 추가 가능)
-    scheduleHide(HIDE_DELAY);
-    return;
-  }
+// ── Orb 위에서 손 뗌 (홀드 중, 위치 이동 아님) → Orb 탭 (도구 전환용은 아님) ──
+if (orbHolding && !orbRelocating) {
+try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
+orbHolding = false;
+orbHoldPointerId = null;
+// Orb 탭은 이제 도구 활성화에 사용하지 않음 (화면 탭이 대신함)
+// 대신 Orb 탭 → 아무 동작 없음 (또는 향후 기능 추가 가능)
+scheduleHide(HIDE_DELAY);
+return;
+}
 
-  if (orbRelocating) {
-    try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
-    orbHolding = false;
-    orbRelocating = false;
-    orbHoldPointerId = null;
-    scheduleHide(HIDE_DELAY);
-    return;
-  }
+if (orbRelocating) {
+try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
+orbHolding = false;
+orbRelocating = false;
+orbHoldPointerId = null;
+scheduleHide(HIDE_DELAY);
+return;
+}
 
-  scheduleHide(HIDE_DELAY);
+scheduleHide(HIDE_DELAY);
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   ★ 외부에서 호출 — 도구 사용 완료 후 처리
-      (touch.js에서 touchend 시 호출)
-      ★ 변경: 사용 후 즉시 pan 복귀하지 않고,
-             Orb 타이머만 리셋. Orb가 사라질 때 pan 복귀.
-   ╚══════════════════════════════════════════════════════════╝ */
+★ 외부에서 호출 — 도구 사용 완료 후 처리
+(touch.js에서 touchend 시 호출)
+★ 변경: 사용 후 즉시 pan 복귀하지 않고,
+Orb 타이머만 리셋. Orb가 사라질 때 pan 복귀.
+╚══════════════════════════════════════════════════════════╝ */
 export function scheduleRevertAfterUse() {
-  if (!pendingTool || !toolActivated) return;
-  // 도구는 활성 상태 유지 — Orb 타이머만 리셋
-  scheduleHide(HIDE_DELAY);
+if (!pendingTool || !toolActivated) return;
+// 도구는 활성 상태 유지 — Orb 타이머만 리셋
+scheduleHide(HIDE_DELAY);
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   드래그 모드 (도구 전환)
-   ╚══════════════════════════════════════════════════════════╝ */
+드래그 모드 (도구 전환)
+╚══════════════════════════════════════════════════════════╝ */
 function activateOrbDrag(e) {
-  orbActive = true;
-  orbLock   = true;
-  orbDragStartX = e.clientX;
-  orbSteps = 0;
+orbActive = true;
+orbLock   = true;
+orbDragStartX = e.clientX;
+orbSteps = 0;
 
-  const baseTool = pendingTool || tool;
-  const order = getToolOrder();
-  orbBaseIdx = order.indexOf(baseTool);
-  if (orbBaseIdx === -1) orbBaseIdx = 0;
-  orbPreviewTool = baseTool;
+const baseTool = pendingTool || tool;
+const order = getToolOrder();
+orbBaseIdx = order.indexOf(baseTool);
+if (orbBaseIdx === -1) orbBaseIdx = 0;
+orbPreviewTool = baseTool;
 
-  orb.classList.add('orb-active');
-  updateLabel(baseTool);
+orb.classList.add(‘orb-active’);
+updateLabel(baseTool);
 
-  const tb = document.getElementById('toolbar');
-  if (tb) tb.classList.add('tb-orb-zoom');
+const tb = document.getElementById(‘toolbar’);
+if (tb) tb.classList.add(‘tb-orb-zoom’);
 
-  previewToolHighlight(baseTool);
+previewToolHighlight(baseTool);
 
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
 }
 
 function handleOrbDrag(e) {
-  const totalDx = e.clientX - orbDragStartX;
-  const newSteps = Math.trunc(totalDx / DRAG_THRESH);
+const totalDx = e.clientX - orbDragStartX;
+const newSteps = Math.trunc(totalDx / DRAG_THRESH);
 
-  if (newSteps !== orbSteps) {
-    orbSteps = newSteps;
-    const order = getToolOrder();
-    let idx = Math.max(0, Math.min(orbBaseIdx + newSteps, order.length - 1));
-    const newTool = order[idx];
+if (newSteps !== orbSteps) {
+orbSteps = newSteps;
+const order = getToolOrder();
+let idx = Math.max(0, Math.min(orbBaseIdx + newSteps, order.length - 1));
+const newTool = order[idx];
 
-    if (newTool !== orbPreviewTool) {
-      orbPreviewTool = newTool;
-      previewToolHighlight(newTool);
-      updateLabel(newTool);
-      if (navigator.vibrate) navigator.vibrate(8);
-    }
-  }
+```
+if (newTool !== orbPreviewTool) {
+  orbPreviewTool = newTool;
+  previewToolHighlight(newTool);
+  updateLabel(newTool);
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+```
+
+}
 }
 
 function finishOrbDrag() {
-  if (!orbActive) return;
-  orbActive = false;
-  orbLock   = false;
-  orb.classList.remove('orb-active');
+if (!orbActive) return;
+orbActive = false;
+orbLock   = false;
+orb.classList.remove(‘orb-active’);
 
-  const tb = document.getElementById('toolbar');
-  if (tb) tb.classList.remove('tb-orb-zoom');
+const tb = document.getElementById(‘toolbar’);
+if (tb) tb.classList.remove(‘tb-orb-zoom’);
 
-  if (orbPreviewTool) {
-    setTool(orbPreviewTool);
-  }
+if (orbPreviewTool) {
+setTool(orbPreviewTool);
+}
 
-  clearPreviewHighlight();
-  updateLabel(orbPreviewTool || pendingTool || tool);
-  toolActivated = false;
-  if (orb) orb.classList.remove('orb-tool-active');
-  scheduleHide(HIDE_DELAY);
+clearPreviewHighlight();
+updateLabel(orbPreviewTool || pendingTool || tool);
+toolActivated = false;
+if (orb) orb.classList.remove(‘orb-tool-active’);
+scheduleHide(HIDE_DELAY);
 }
 
 /* ── 미리보기 고스트 오버레이 ── */
 let orbGhost = null;
 
 function ensureGhost() {
-  if (!orbGhost) {
-    orbGhost = document.createElement('div');
-    orbGhost.id = 'orb-preview-ghost';
-    document.body.appendChild(orbGhost);
-  }
-  return orbGhost;
+if (!orbGhost) {
+orbGhost = document.createElement(‘div’);
+orbGhost.id = ‘orb-preview-ghost’;
+document.body.appendChild(orbGhost);
+}
+return orbGhost;
 }
 
 /* ── 미리보기 하이라이트 ── */
 function previewToolHighlight(t) {
-  clearPreviewHighlight();
-  const btn = document.querySelector(
-    `#tb-tools .tbtn[data-tool="${t}"], #tb-tools .tbtn[data-tool-or-panel="${t}"]`
-  );
-  if (!btn) return;
+clearPreviewHighlight();
+const btn = document.querySelector(
+`#tb-tools .tbtn[data-tool="${t}"], #tb-tools .tbtn[data-tool-or-panel="${t}"]`
+);
+if (!btn) return;
 
-  // 1. #tb-tools를 정상 스크롤로 버튼을 뷰 안으로 이동
-  const container = document.getElementById('tb-tools');
-  if (container) {
-    const btnLeft   = btn.offsetLeft;
-    const btnWidth  = btn.offsetWidth;
-    const contWidth = container.offsetWidth;
-    const target    = btnLeft - (contWidth - btnWidth) / 2;
-    container.scrollLeft = Math.max(0, target);
-  }
+// 1. #tb-tools를 정상 스크롤로 버튼을 뷰 안으로 이동
+const container = document.getElementById(‘tb-tools’);
+if (container) {
+const btnLeft   = btn.offsetLeft;
+const btnWidth  = btn.offsetWidth;
+const contWidth = container.offsetWidth;
+const target    = btnLeft - (contWidth - btnWidth) / 2;
+container.scrollLeft = Math.max(0, target);
+}
 
-  // 2. 버튼 위치를 실제 화면 좌표로 읽어 고스트 오버레이 배치
-  //    (스크롤 후 한 프레임 뒤에 읽어야 정확)
-  requestAnimationFrame(() => {
-    const r = btn.getBoundingClientRect();
-    // 버튼이 실제로 화면 안에 있는 경우에만 고스트 표시
-    if (r.right < 0 || r.left > window.innerWidth) return;
+// 2. 버튼 위치를 실제 화면 좌표로 읽어 고스트 오버레이 배치
+//    (스크롤 후 한 프레임 뒤에 읽어야 정확)
+requestAnimationFrame(() => {
+const r = btn.getBoundingClientRect();
+// 버튼이 실제로 화면 안에 있는 경우에만 고스트 표시
+if (r.right < 0 || r.left > window.innerWidth) return;
 
-    const ghost = ensureGhost();
-    ghost.textContent = btn.textContent;
-    ghost.className   = btn.className + ' orb-preview-ghost-active';
-    // 버튼 중앙에 고스트를 배치하고 scale은 CSS에서
-    const cx = r.left + r.width / 2;
-    const cy = r.top  + r.height / 2;
-    ghost.style.left = cx + 'px';
-    ghost.style.top  = cy + 'px';
-    ghost.style.width  = r.width  + 'px';
-    ghost.style.height = r.height + 'px';
-  });
+```
+const ghost = ensureGhost();
+ghost.textContent = btn.textContent;
+ghost.className   = btn.className + ' orb-preview-ghost-active';
+// 버튼 중앙에 고스트를 배치하고 scale은 CSS에서
+const cx = r.left + r.width / 2;
+const cy = r.top  + r.height / 2;
+ghost.style.left = cx + 'px';
+ghost.style.top  = cy + 'px';
+ghost.style.width  = r.width  + 'px';
+ghost.style.height = r.height + 'px';
+```
+
+});
 }
 
 function clearPreviewHighlight() {
-  document.querySelectorAll('.orb-preview').forEach(b => b.classList.remove('orb-preview'));
-  if (orbGhost) {
-    orbGhost.className = '';
-    orbGhost.textContent = '';
-  }
+document.querySelectorAll(’.orb-preview’).forEach(b => b.classList.remove(‘orb-preview’));
+if (orbGhost) {
+orbGhost.className = ‘’;
+orbGhost.textContent = ‘’;
+}
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   표시 / 숨기기 / 레이블
-   ╚══════════════════════════════════════════════════════════╝ */
+표시 / 숨기기 / 레이블
+╚══════════════════════════════════════════════════════════╝ */
 function showOrb() {
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  if (!visible) {
-    visible = true;
-    orb.classList.add('orb-visible');
-    currentX = targetX;
-    currentY = targetY;
-    applyPosition();
-  }
+if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+if (!visible) {
+visible = true;
+orb.classList.add(‘orb-visible’);
+currentX = targetX;
+currentY = targetY;
+applyPosition();
+}
 }
 
 function hideOrbNow() {
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  visible = false;
-  if (orb) {
-    orb.classList.remove('orb-visible');
-    orb.classList.remove('orb-tool-active');
-  }
-  clearPreviewHighlight();
+if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+visible = false;
+if (orb) {
+orb.classList.remove(‘orb-visible’);
+orb.classList.remove(‘orb-tool-active’);
+}
+clearPreviewHighlight();
 }
 
 function scheduleHide(ms) {
-  if (hideTimer) clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    if (orbActive) return;
-    visible = false;
-    orb.classList.remove('orb-visible');
-    orb.classList.remove('orb-tool-active');
+if (hideTimer) clearTimeout(hideTimer);
+hideTimer = setTimeout(() => {
+if (orbActive) return;
+visible = false;
+orb.classList.remove(‘orb-visible’);
+orb.classList.remove(‘orb-tool-active’);
 
-    // Orb가 사라져도 pendingTool은 유지 (화면 탭으로 다시 활성화 가능)
-    if (toolActivated) {
-      revertToPan();
-      toolActivated = false;
-    }
+```
+// Orb가 사라져도 pendingTool은 유지 (화면 탭으로 다시 활성화 가능)
+if (toolActivated) {
+  revertToPan();
+  toolActivated = false;
+}
 
-    hideTimer = null;
-  }, ms);
+hideTimer = null;
+```
+
+}, ms);
 }
 
 function updateLabel(t) {
-  const map = {
-    select: '⊹', edit: '✎', pan: '✋',
-    pen: '✏️', highlight: '🖊️', eraser: '◻',
-    text: 'T', rect: '□', circle: '○', arrow: '→',
-  };
-  if (!orbLabel) return;
-  orbLabel.textContent = map[t] || t.charAt(0).toUpperCase();
+const map = {
+select: ‘⊹’, edit: ‘✎’, pan: ‘✋’,
+pen: ‘✏️’, highlight: ‘🖊️’, eraser: ‘◻’,
+text: ‘T’, rect: ‘□’, circle: ‘○’, arrow: ‘→’,
+};
+if (!orbLabel) return;
+orbLabel.textContent = map[t] || t.charAt(0).toUpperCase();
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   애니메이션 루프
-   ╚══════════════════════════════════════════════════════════╝ */
+애니메이션 루프
+╚══════════════════════════════════════════════════════════╝ */
 function animLoop() {
-  if (!orbRelocating) {
-    const dx = targetX - currentX;
-    const dy = targetY - currentY;
+if (!orbRelocating) {
+const dx = targetX - currentX;
+const dy = targetY - currentY;
 
-    if (dx < -0.5) {
-      currentX = targetX;
-    } else {
-      currentX += dx * LERP_RIGHT;
-    }
+```
+if (dx < -0.5) {
+  currentX = targetX;
+} else {
+  currentX += dx * LERP_RIGHT;
+}
 
-    currentY += dy * LERP_RIGHT;
-  }
-  applyPosition();
-  requestAnimationFrame(animLoop);
+currentY += dy * LERP_RIGHT;
+```
+
+}
+applyPosition();
+requestAnimationFrame(animLoop);
 }
 
 function applyPosition() {
-  const half = ORB_SIZE / 2;
-  const x = Math.max(half, Math.min(currentX, window.innerWidth - half));
-  const y = Math.max(half, Math.min(currentY, window.innerHeight - half));
-  orb.style.transform = `translate(${x - half}px, ${y - half}px)`;
+const half = ORB_SIZE / 2;
+const x = Math.max(half, Math.min(currentX, window.innerWidth - half));
+const y = Math.max(half, Math.min(currentY, window.innerHeight - half));
+orb.style.transform = `translate(${x - half}px, ${y - half}px)`;
 }
