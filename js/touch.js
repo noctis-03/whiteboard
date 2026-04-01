@@ -1,11 +1,18 @@
 // ═══════════════════════════════════════════════════
 //  touch.js — 터치 이벤트 (1-finger, 핀치줌)
 //
-//  ★ 변경사항:
-//  · 화면 탭 → 도구 활성화 (Orb 탭 불필요)
-//  · 활성화 후 계속 사용 가능 (한 번 쓰고 해제 아님)
-//  · 사용할 때마다 notifyToolUsed() → idle 타이머 리셋
-//  · 일정 시간 터치 없으면 Orb 사라지며 자동 해제
+//  ★ 변경: 화면 탭 → 도구 활성화 + 즉시 사용
+//  · touchstart 시점에 도구를 활성화하고 도구 동작 시작
+//  · touchmove에서 이동 거리가 작으면 도구 사용, 크면 취소 → pan
+//  · 또는: 짧은 터치(탭) 후 다음 터치에서 도구 사용
+//
+//  ★★ 최종 방식:
+//  · pendingTool이 있고 toolActivated가 false인 상태에서:
+//    - 짧은 탭(TAP) = 도구 활성화 (그리기 도구면 다음 터치에서 그리기 시작)
+//    - 길게 누르며 이동(DRAG) = pan 이동
+//  · toolActivated가 true인 상태에서:
+//    - 터치 = 해당 도구로 동작 (그리기, 텍스트 등)
+//    - 사용 완료 후 자동 pan 복귀
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -17,7 +24,7 @@ import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
 import { focusEditableTouch } from './edit.js';
 import { pushState } from './history.js';
-import { orbLock, toolActivated, tryActivateByTap, notifyToolUsed, scheduleRevertAfterUse } from './toolOrb.js';
+import { orbLock, toolActivated, tryActivateByTap, scheduleRevertAfterUse } from './toolOrb.js';
 
 /* ── 탭 판정 상수 ── */
 const TAP_MOVE_THRESH = 12;
@@ -27,7 +34,8 @@ const TAP_TIME_THRESH = 250;
 let tapStartX = 0;
 let tapStartY = 0;
 let tapStartTime = 0;
-let tapPending = false;
+let tapPending = false;       // 탭 판정 대기 중
+let activatedThisTouch = false; // 이번 터치로 활성화했는지
 
 function cancelSingleFingerActions() {
   if (S.drawing) {
@@ -43,14 +51,46 @@ function cancelSingleFingerActions() {
   cancelLongPress();
 }
 
+/* ── 도구 동작 시작 (활성화된 도구에 따라) ── */
+function startToolAction(touch) {
+  const bp = s2b(touch.clientX, touch.clientY);
+
+  if (S.tool === 'pen' || S.tool === 'highlight') {
+    startDraw(bp);
+    return true;
+  }
+  if (S.tool === 'eraser') {
+    S.setDrawing(true);
+    eraseAt(bp);
+    return true;
+  }
+  if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') {
+    S.setDrawing(true);
+    S.setShapeA(bp);
+    return true;
+  }
+  if (S.tool === 'text') {
+    addText(bp);
+    pushState();
+    return true;
+  }
+  if (S.tool === 'edit') {
+    // edit 모드는 별도 처리
+    return false;
+  }
+  if (S.tool === 'select') {
+    return false;
+  }
+  return false;
+}
+
 export function initTouchEvents() {
   S.vp.addEventListener('touchstart', e => {
     if (orbLock) { e.preventDefault(); return; }
     cancelLongPress();
+    activatedThisTouch = false;
 
-    // ── 핀치줌 ──
     if (e.touches.length === 2) {
-      tapPending = false;
       cancelSingleFingerActions();
       const t0 = e.touches[0], t1 = e.touches[1];
       S.setPinchDist(Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY));
@@ -63,16 +103,15 @@ export function initTouchEvents() {
     const t = e.touches[0];
     closeCtx();
 
-    // ═══════════════════════════════════════════════
-    // ★ 케이스 1: pendingTool 있고, 아직 미활성 → 탭/드래그 판정
-    // ═══════════════════════════════════════════════
+    // ★ pendingTool이 있고 아직 활성화되지 않은 상태
+    //   → 일단 pan으로 시작하되, 탭 판정을 추적
     if (S.pendingTool && !toolActivated) {
       tapStartX = t.clientX;
       tapStartY = t.clientY;
       tapStartTime = Date.now();
       tapPending = true;
 
-      // 일단 pan 준비 (드래그 시 화면 이동)
+      // pan 시작 (드래그 시 화면 이동용)
       const r = getVpRect();
       S.setTouchPanOrigin({ x: t.clientX - r.left - S.T.x, y: t.clientY - r.top - S.T.y });
       document.body.classList.add('panning');
@@ -80,17 +119,13 @@ export function initTouchEvents() {
       return;
     }
 
-    // ═══════════════════════════════════════════════
-    // ★ 케이스 2: 도구 이미 활성 → 바로 도구 동작
-    // ═══════════════════════════════════════════════
-    if (toolActivated && S.pendingTool) {
-      notifyToolUsed();  // ★ idle 타이머 리셋
-
-      const bp = s2b(t.clientX, t.clientY);
-      if (S.tool === 'pen' || S.tool === 'highlight') { startDraw(bp); e.preventDefault(); return; }
-      if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(bp); e.preventDefault(); return; }
-      if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(bp); e.preventDefault(); return; }
-      if (S.tool === 'text') { addText(bp); pushState(); e.preventDefault(); return; }
+    // ★ pendingTool이 있고 이미 활성화된 상태 → 도구 동작 시작
+    if (S.pendingTool && toolActivated) {
+      // tool은 이미 activatePending()으로 실제 도구로 설정되어 있음
+      if (S.tool === 'pen' || S.tool === 'highlight') { startDraw(s2b(t.clientX, t.clientY)); e.preventDefault(); return; }
+      if (S.tool === 'eraser') { S.setDrawing(true); eraseAt(s2b(t.clientX, t.clientY)); e.preventDefault(); return; }
+      if (S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') { S.setDrawing(true); S.setShapeA(s2b(t.clientX, t.clientY)); e.preventDefault(); return; }
+      if (S.tool === 'text') { addText(s2b(t.clientX, t.clientY)); pushState(); e.preventDefault(); return; }
       if (S.tool === 'select') {
         if (!e.target.closest('.el')) {
           deselectAll();
@@ -111,9 +146,7 @@ export function initTouchEvents() {
       return;
     }
 
-    // ═══════════════════════════════════════════════
-    // 케이스 3: pendingTool 없음 → 기존 로직
-    // ═══════════════════════════════════════════════
+    // ── 기존 로직: pendingTool 없을 때 (pan 도구 선택 등) ──
     if (S.tool === 'pan') {
       const r = getVpRect();
       S.setTouchPanOrigin({ x: t.clientX - r.left - S.T.x, y: t.clientY - r.top - S.T.y });
@@ -129,8 +162,12 @@ export function initTouchEvents() {
 
     if (S.tool === 'edit') {
       const elDiv = e.target.closest('.el');
-      if (elDiv) { focusEditableTouch(elDiv, t); }
-      else { const active = document.activeElement; if (active && active !== document.body) active.blur(); }
+      if (elDiv) {
+        focusEditableTouch(elDiv, t);
+      } else {
+        const active = document.activeElement;
+        if (active && active !== document.body) active.blur();
+      }
       return;
     }
 
@@ -145,15 +182,12 @@ export function initTouchEvents() {
     }
   }, { passive: false });
 
-  // ═══════════════════════════════════════════════
-  // touchmove
-  // ═══════════════════════════════════════════════
   window.addEventListener('touchmove', e => {
     if (orbLock) { e.preventDefault(); return; }
 
     if (e.touches.length === 2 && S.pinchActive) {
-      tapPending = false;
       e.preventDefault();
+      tapPending = false; // 핀치 시 탭 취소
       const t0 = e.touches[0], t1 = e.touches[1];
       const newDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       const newMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
@@ -175,16 +209,20 @@ export function initTouchEvents() {
     cancelLongPress();
     const t = e.touches[0];
 
-    // ★ 탭 판정 중: 이동 감지
+    // ★ 탭 판정 중: 이동 거리 체크
     if (tapPending) {
       const dx = t.clientX - tapStartX;
       const dy = t.clientY - tapStartY;
-      if (Math.sqrt(dx * dx + dy * dy) > TAP_MOVE_THRESH) {
-        tapPending = false;  // 드래그로 판정 → pan 이동 계속
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > TAP_MOVE_THRESH) {
+        // 드래그로 판정 → 탭 취소, pan 이동 계속
+        tapPending = false;
       }
+      // 탭 판정 중에도 pan 이동은 진행
     }
 
-        if (S.tool === 'edit' && !S.touchPanOrigin) return;
+    if (S.tool === 'edit' && !S.touchPanOrigin) return;
 
     if (S.touchPanOrigin) {
       const r = getVpRect();
@@ -211,56 +249,48 @@ export function initTouchEvents() {
     if ((S.tool === 'rect' || S.tool === 'circle' || S.tool === 'arrow') && S.shapeA) previewShape(S.shapeA, bp);
   }, { passive: false });
 
-  // ═══════════════════════════════════════════════
-  // touchend
-  // ═══════════════════════════════════════════════
   window.addEventListener('touchend', e => {
     if (orbLock) return;
     cancelLongPress();
     document.body.classList.remove('panning');
 
-    if (e.touches.length === 0 && S.pinchActive) {
-      S.setPinchActive(false); S.setPinchDist(null); S.setPinchMid(null);
-    }
+    if (e.touches.length === 0 && S.pinchActive) { S.setPinchActive(false); S.setPinchDist(null); S.setPinchMid(null); }
 
-    // ═══════════════════════════════════════════════
-    // ★ 탭 판정 완료
-    // ═══════════════════════════════════════════════
+    // ★ 탭 판정 완료: 짧은 터치 + 이동 적음 = 탭!
     if (tapPending) {
       tapPending = false;
       const elapsed = Date.now() - tapStartTime;
 
       if (elapsed < TAP_TIME_THRESH) {
-        // ★ 탭! → pan 취소, 도구 활성화
-        S.setTouchPanOrigin(null);
+        // 탭으로 판정 → 도구 활성화!
+        S.setTouchPanOrigin(null); // pan 동작 취소
 
         const activated = tryActivateByTap();
         if (activated) {
-          // 텍스트처럼 탭 한 번으로 완성되는 도구는 즉시 실행
+          activatedThisTouch = true;
+          // 도구가 활성화됨. 다음 터치에서 실제 도구 동작 시작.
+          // (텍스트 도구 등 탭 한 번으로 동작하는 것은 여기서 바로 실행)
           if (S.tool === 'text' || S.pendingTool === 'text') {
             const lastT = e.changedTouches[0];
             if (lastT) {
               addText(s2b(lastT.clientX, lastT.clientY));
               pushState();
-              notifyToolUsed();  // idle 타이머 리셋
+              scheduleRevertAfterUse();
             }
           }
-          // 나머지 도구는 다음 터치부터 사용 가능
           return;
         }
       }
-      // 탭 아님 (시간 초과) → pan 종료
+      // 탭이 아님 (시간 초과) → pan 종료
       S.setTouchPanOrigin(null);
       return;
     }
 
-    // ── 기존 종료 처리 ──
     if (S.touchPanOrigin) { S.setTouchPanOrigin(null); return; }
     if (S.dragging) { S.setDragging(null); updateMinimap(); pushState(); return; }
     if (S.resizing) { S.setResizing(null); updateMinimap(); pushState(); return; }
     if (S.touchLasso) { finalizeLasso(S.touchLasso); S.setTouchLasso(null); hideSelRect(); clearLassoHover(); return; }
     if (!S.drawing) return;
-
     S.setDrawing(false);
     S.pCtx.clearRect(0, 0, S.pCvs.width, S.pCvs.height);
     const lastT = e.changedTouches[0];
@@ -274,8 +304,7 @@ export function initTouchEvents() {
       S.setShapeA(null);
     }
 
-    // ★ 도구 사용 완료 → 즉시 해제 아님! idle 타이머만 리셋
-    notifyToolUsed();
+    // ★ 도구 사용 완료 → pan 복귀 스케줄
+    scheduleRevertAfterUse();
   });
 }
-
