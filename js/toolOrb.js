@@ -130,9 +130,11 @@ function onGlobalMove(e) {
     return;
   }
 
-  if (e.target.closest('#toolbar') ||
+    if (e.target.closest('#toolbar') ||
       e.target.closest('#pen-panel') ||
-      e.target.closest('#color-bar')) return;
+      e.target.closest('#color-bar') ||
+      orb.contains(e.target)) return;
+
 
   if (e.buttons > 0 || e.pointerType === 'touch') {
     targetX = e.clientX + OFFSET_X;
