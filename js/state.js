@@ -1,7 +1,5 @@
 // ═══════════════════════════════════════════════════
 //  state.js — 전역 상태 & DOM 참조
-//
-//  UPDATE: pendingTool (터치 예약 도구) 추가
 // ═══════════════════════════════════════════════════
 
 // DOM references
@@ -26,7 +24,7 @@ export function setToolState(t)  { tool = t; }
 export function setColorState(c) { color = c; }
 export function setSwState(v)    { sw = v; }
 
-// ★ NEW: 터치 예약 도구
+// ★ 터치 예약 도구
 export let pendingTool = null;
 export function setPendingTool(v) { pendingTool = v; }
 
@@ -79,6 +77,10 @@ export function nextZ()              { return ++zTop; }
 export function setZTop(v)           { zTop = v; }
 export function setGridOn(v)         { gridOn = v; }
 export function setLongPressTimer(v) { longPressTimer = v; }
+
+// ★ getter 함수: import 바인딩 문제 방지용
+export function getStrokes()  { return strokes; }
+export function getToolState() { return tool; }
 
 // Pinch state
 export let pinchDist   = null;
