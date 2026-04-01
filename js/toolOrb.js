@@ -105,7 +105,8 @@ export function tryActivateByTap() {
   activatePending();
   toolActivated = true;
   if (orb) orb.classList.add('orb-tool-active');
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  // 도구를 사용하지 않아도 Orb가 사라지도록 타이머 유지
+  scheduleHide(HIDE_DELAY);
   return true;
 }
 
@@ -389,15 +390,18 @@ function previewToolHighlight(t) {
   );
   if (btn) {
     btn.classList.add('orb-preview');
-    // overflow: visible 상태에서는 scrollIntoView가 동작하지 않으므로
-    // #tb-tools의 scrollLeft를 직접 조정해 버튼을 중앙에 맞춤
+    // overflow: visible 상태에서는 scrollLeft가 무시되므로
+    // 일시적으로 overflow-x를 auto로 되돌려 스크롤 후 다시 visible로 복귀
     const container = document.getElementById('tb-tools');
     if (container) {
+      container.style.overflowX = 'auto';
       const btnLeft   = btn.offsetLeft;
       const btnWidth  = btn.offsetWidth;
       const contWidth = container.offsetWidth;
       const target    = btnLeft - (contWidth - btnWidth) / 2;
       container.scrollLeft = Math.max(0, target);
+      // 다음 프레임에서 visible로 복귀 (클리핑 방지)
+      requestAnimationFrame(() => { container.style.overflowX = ''; });
     }
   }
 }
