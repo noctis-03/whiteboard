@@ -6,11 +6,8 @@
 //  · 드래그 중에는 캔버스 도구 동작 완전 차단
 //  · 손을 떼면 해당 도구 확정
 //
-//  UPDATE: 드래그 모드 진입 시 toolbar 확대 애니메이션
-//          선택 예정 표시 디자인 개선
-//          ★ long press 진입 추가 & move 시 orb 도망 방지
-//          ★★ long press 판정 전에는 orb 위치를 자유롭게 이동 가능
-//              일정 거리 이상 이동 시 long press 취소 (위치 이동 모드)
+//  UPDATE: 왼쪽 이동 → 순간이동 / 오른쪽 이동 → 빠른 lerp
+//          long press 판정 전 orb 위치 자유 이동
 // ╔══════════════════════════════════════════════════════════╗
 
 import { tool } from './state.js';
@@ -20,12 +17,12 @@ import { setTool } from './tools.js';
 const ORB_SIZE     = 36;
 const OFFSET_X     = -30;
 const OFFSET_Y     = -28;
-const LERP          = 0.15;
+const LERP_RIGHT   = 0.35;          // ★ 오른쪽: 기존 0.15 → 0.35 (빠르게)
 const DRAG_THRESH  = 28;
 const DBLCLICK_MS  = 320;
 const LONGPRESS_MS = 400;
 const HIDE_DELAY   = 4000;
-const MOVE_CANCEL_DIST = 12;   // ★★ NEW: 이 거리 이상 움직이면 long press 취소 → 위치 이동 모드
+const MOVE_CANCEL_DIST = 12;
 
 /* ── 전역 참조 플래그 ── */
 export let orbLock = false;
@@ -58,14 +55,14 @@ let orbLastDownTime = 0;
 /* ── long press 감지 ── */
 let orbLongPressTimer = null;
 
-/* ── ★★ NEW: Orb 위치 이동(홀드) 상태 ── */
-let orbHolding = false;           // orb를 누르고 있는 중 (아직 모드 미확정)
-let orbRelocating = false;        // long press 취소됨 → 위치 이동 모드
-let orbHoldStartX = 0;            // pointerdown 시 화면 좌표
+/* ── Orb 위치 이동(홀드) 상태 ── */
+let orbHolding = false;
+let orbRelocating = false;
+let orbHoldStartX = 0;
 let orbHoldStartY = 0;
-let orbHoldOrbStartX = 0;         // pointerdown 시 orb의 current 위치
+let orbHoldOrbStartX = 0;
 let orbHoldOrbStartY = 0;
-let orbHoldPointerId = null;      // 추적 중인 pointer id
+let orbHoldPointerId = null;
 
 /* ── 드래그 모드 (도구 전환) ── */
 let orbActive      = false;
@@ -119,7 +116,7 @@ function onOrbPointerDown(e) {
 
   orbLastDownTime = now;
 
-  // ── ★★ 홀드 상태 시작: orb를 누르기 시작 ──
+  // ── 홀드 상태 시작 ──
   orbHolding = true;
   orbRelocating = false;
   orbHoldStartX = e.clientX;
@@ -128,14 +125,12 @@ function onOrbPointerDown(e) {
   orbHoldOrbStartY = currentY;
   orbHoldPointerId = e.pointerId;
 
-  // pointer capture for reliable tracking
   try { orb.setPointerCapture(e.pointerId); } catch (_) {}
 
   // ── long press 타이머 시작 ──
   cancelOrbLongPress();
   orbLongPressTimer = setTimeout(() => {
     orbLongPressTimer = null;
-    // long press 성공 → 도구 전환 드래그 모드 진입
     if (orbHolding && !orbRelocating) {
       orbHolding = false;
       activateOrbDrag(e);
@@ -144,7 +139,7 @@ function onOrbPointerDown(e) {
   }, LONGPRESS_MS);
 }
 
-/* ── long press 타이머 취소 헬퍼 ── */
+/* ── long press 타이머 취소 ── */
 function cancelOrbLongPress() {
   if (orbLongPressTimer) {
     clearTimeout(orbLongPressTimer);
@@ -152,12 +147,11 @@ function cancelOrbLongPress() {
   }
 }
 
-/* ── ★★ 홀드/위치이동 상태 초기화 ── */
+/* ── 홀드/위치이동 상태 초기화 ── */
 function cancelOrbHold() {
   orbHolding = false;
   orbRelocating = false;
   orbHoldPointerId = null;
-  try { orb.releasePointerCapture(orbHoldPointerId); } catch (_) {}
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
@@ -183,7 +177,7 @@ function onGlobalDown(e) {
 }
 
 function onGlobalMove(e) {
-  // ── ★★ 도구 전환 드래그 모드 중 ──
+  // ── 도구 전환 드래그 모드 중 ──
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
@@ -193,7 +187,7 @@ function onGlobalMove(e) {
     return;
   }
 
-  // ── ★★ Orb 홀드 중 (long press 판정 대기 또는 위치 이동 모드) ──
+  // ── Orb 홀드 중 (long press 대기 또는 위치 이동 모드) ──
   if (orbHolding || orbRelocating) {
     e.stopPropagation();
     e.preventDefault();
@@ -203,17 +197,13 @@ function onGlobalMove(e) {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (!orbRelocating && dist > MOVE_CANCEL_DIST) {
-      // 일정 거리 이상 움직임 → long press 취소, 위치 이동 모드로 전환
       cancelOrbLongPress();
       orbRelocating = true;
     }
 
     if (orbRelocating) {
-      // orb 위치를 손가락 따라 이동
-      const half = ORB_SIZE / 2;
       const newX = orbHoldOrbStartX + dx;
       const newY = orbHoldOrbStartY + dy;
-      // target과 current 모두 즉시 갱신 (lerp 없이 즉각 반영)
       targetX = newX;
       targetY = newY;
       currentX = newX;
@@ -238,7 +228,6 @@ function onGlobalMove(e) {
 function onGlobalUp(e) {
   cancelOrbLongPress();
 
-  // ── ★★ 도구 전환 드래그 모드 종료 ──
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
@@ -247,7 +236,6 @@ function onGlobalUp(e) {
     return;
   }
 
-  // ── ★★ 홀드/위치이동 상태 종료 ──
   if (orbHolding || orbRelocating) {
     try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
     orbHolding = false;
@@ -277,11 +265,9 @@ function activateOrbDrag(e) {
   orb.classList.add('orb-active');
   updateLabel(tool);
 
-  // ★ 도구창 확대 애니메이션 — 클래스 추가
   const tb = document.getElementById('toolbar');
   if (tb) tb.classList.add('tb-orb-zoom');
 
-  // 현재 활성 버튼에 미리보기 표시
   previewToolHighlight(tool);
 
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -312,7 +298,6 @@ function finishOrbDrag() {
   orbLock   = false;
   orb.classList.remove('orb-active');
 
-  // ★ 도구창 확대 해제
   const tb = document.getElementById('toolbar');
   if (tb) tb.classList.remove('tb-orb-zoom');
 
@@ -375,13 +360,23 @@ function updateLabel(t) {
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   애니메이션 루프
+   애니메이션 루프 — ★ 방향별 이동 속도 분리
    ╚══════════════════════════════════════════════════════════╝ */
 function animLoop() {
-  // ★★ 위치 이동 모드에서는 lerp 건너뜀 (이미 즉시 반영됨)
   if (!orbRelocating) {
-    currentX += (targetX - currentX) * LERP;
-    currentY += (targetY - currentY) * LERP;
+    const dx = targetX - currentX;
+    const dy = targetY - currentY;
+
+    if (dx < -0.5) {
+      // ★ 왼쪽 이동 → 순간이동
+      currentX = targetX;
+    } else {
+      // ★ 오른쪽 이동 (또는 제자리) → 빠른 lerp
+      currentX += dx * LERP_RIGHT;
+    }
+
+    // Y축은 항상 빠른 lerp
+    currentY += dy * LERP_RIGHT;
   }
   applyPosition();
   requestAnimationFrame(animLoop);
