@@ -389,7 +389,16 @@ function previewToolHighlight(t) {
   );
   if (btn) {
     btn.classList.add('orb-preview');
-    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    // overflow: visible 상태에서는 scrollIntoView가 동작하지 않으므로
+    // #tb-tools의 scrollLeft를 직접 조정해 버튼을 중앙에 맞춤
+    const container = document.getElementById('tb-tools');
+    if (container) {
+      const btnLeft   = btn.offsetLeft;
+      const btnWidth  = btn.offsetWidth;
+      const contWidth = container.offsetWidth;
+      const target    = btnLeft - (contWidth - btnWidth) / 2;
+      container.scrollLeft = Math.max(0, target);
+    }
   }
 }
 
