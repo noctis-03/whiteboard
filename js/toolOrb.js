@@ -14,7 +14,7 @@ import { setTool, activatePending, revertToPan } from './tools.js';
 
 /* ── 설정 ── */
 const ORB_SIZE     = 36;
-const OFFSET_X     = -40;
+const OFFSET_X     = -30;
 const OFFSET_Y     = -28;
 const LERP_RIGHT   = 0.35;
 const DRAG_THRESH  = 28;
@@ -382,32 +382,62 @@ function finishOrbDrag() {
   scheduleHide(HIDE_DELAY);
 }
 
+/* ── 미리보기 고스트 오버레이 ── */
+let orbGhost = null;
+
+function ensureGhost() {
+  if (!orbGhost) {
+    orbGhost = document.createElement('div');
+    orbGhost.id = 'orb-preview-ghost';
+    document.body.appendChild(orbGhost);
+  }
+  return orbGhost;
+}
+
 /* ── 미리보기 하이라이트 ── */
 function previewToolHighlight(t) {
   clearPreviewHighlight();
   const btn = document.querySelector(
     `#tb-tools .tbtn[data-tool="${t}"], #tb-tools .tbtn[data-tool-or-panel="${t}"]`
   );
-  if (btn) {
-    btn.classList.add('orb-preview');
-    // overflow: visible 상태에서는 scrollLeft가 무시되므로
-    // 일시적으로 overflow-x를 auto로 되돌려 스크롤 후 다시 visible로 복귀
-    const container = document.getElementById('tb-tools');
-    if (container) {
-      container.style.overflowX = 'auto';
-      const btnLeft   = btn.offsetLeft;
-      const btnWidth  = btn.offsetWidth;
-      const contWidth = container.offsetWidth;
-      const target    = btnLeft - (contWidth - btnWidth) / 2;
-      container.scrollLeft = Math.max(0, target);
-      // 다음 프레임에서 visible로 복귀 (클리핑 방지)
-      requestAnimationFrame(() => { container.style.overflowX = ''; });
-    }
+  if (!btn) return;
+
+  // 1. #tb-tools를 정상 스크롤로 버튼을 뷰 안으로 이동
+  const container = document.getElementById('tb-tools');
+  if (container) {
+    const btnLeft   = btn.offsetLeft;
+    const btnWidth  = btn.offsetWidth;
+    const contWidth = container.offsetWidth;
+    const target    = btnLeft - (contWidth - btnWidth) / 2;
+    container.scrollLeft = Math.max(0, target);
   }
+
+  // 2. 버튼 위치를 실제 화면 좌표로 읽어 고스트 오버레이 배치
+  //    (스크롤 후 한 프레임 뒤에 읽어야 정확)
+  requestAnimationFrame(() => {
+    const r = btn.getBoundingClientRect();
+    // 버튼이 실제로 화면 안에 있는 경우에만 고스트 표시
+    if (r.right < 0 || r.left > window.innerWidth) return;
+
+    const ghost = ensureGhost();
+    ghost.textContent = btn.textContent;
+    ghost.className   = btn.className + ' orb-preview-ghost-active';
+    // 버튼 중앙에 고스트를 배치하고 scale은 CSS에서
+    const cx = r.left + r.width / 2;
+    const cy = r.top  + r.height / 2;
+    ghost.style.left = cx + 'px';
+    ghost.style.top  = cy + 'px';
+    ghost.style.width  = r.width  + 'px';
+    ghost.style.height = r.height + 'px';
+  });
 }
 
 function clearPreviewHighlight() {
   document.querySelectorAll('.orb-preview').forEach(b => b.classList.remove('orb-preview'));
+  if (orbGhost) {
+    orbGhost.className = '';
+    orbGhost.textContent = '';
+  }
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
