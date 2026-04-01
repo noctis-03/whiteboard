@@ -570,3 +570,20 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
   opacity: 0.55;
   background: color-mix(in srgb, var(--ink) 60%, transparent);
 }
+
+/* ══════════════════════════════════════════════════════
+   Tool Orb — 도구 활성화 상태 (탭으로 활성화됐을 때)
+══════════════════════════════════════════════════════ */
+#tool-orb.orb-tool-active {
+  opacity: 1 !important;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(200, 75, 47, 0.2),
+              0 4px 14px rgba(26, 23, 20, 0.18);
+  animation: orb-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes orb-pulse {
+  0%   { box-shadow: 0 0 0 4px rgba(200, 75, 47, 0.2), 0 4px 14px rgba(26,23,20,0.18); }
+  50%  { box-shadow: 0 0 0 8px rgba(200, 75, 47, 0.1), 0 4px 14px rgba(26,23,20,0.18); }
+  100% { box-shadow: 0 0 0 4px rgba(200, 75, 47, 0.2), 0 4px 14px rgba(26,23,20,0.18); }
+}
