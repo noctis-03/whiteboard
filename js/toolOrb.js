@@ -14,7 +14,7 @@ import { setTool, activatePending, revertToPan } from './tools.js';
 
 /* ── 설정 ── */
 const ORB_SIZE     = 36;
-const OFFSET_X     = -30;
+const OFFSET_X     = -40;
 const OFFSET_Y     = -28;
 const LERP_RIGHT   = 0.35;
 const DRAG_THRESH  = 28;
