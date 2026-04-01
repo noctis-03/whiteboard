@@ -1,9 +1,5 @@
 // ═══════════════════════════════════════════════════
 //  card.js — 카드 윈도우 & 서브블록
-//
-//  UPDATE: 서브블록 그리드 스냅 (생성·드래그·리사이즈)
-//  UPDATE: _createSubBlock export 추가 (history 복원용)
-//  UPDATE: 서브블록 생성·드래그·리사이즈 후 pushState 호출
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -14,16 +10,14 @@ import { updateMinimap } from './layout.js';
 import { pushState } from './history.js';
 
 // ── 그리드 스냅 설정 ──
-const GRID  = 20;   // 스냅 단위 (px) — CSS background-size 와 동일
-const MIN_W = 80;   // 서브블록 최소 너비
-const MIN_H = 50;   // 서브블록 최소 높이
+const GRID  = 20;
+const MIN_W = 80;
+const MIN_H = 50;
 
-/** 값을 GRID 단위로 반올림 */
 function snap(v) {
   return Math.round(v / GRID) * GRID;
 }
 
-/** 범위 제한 후 스냅 */
 function clampSnap(val, max) {
   return snap(Math.max(0, Math.min(val, max)));
 }
@@ -32,7 +26,6 @@ function clampSnap(val, max) {
 //  서브블록 생성
 // ═══════════════════════════════════════════════════
 function createSubBlock(container, x = 10, y = 10) {
-  // 생성 좌표·크기도 그리드에 맞춤
   const initW = snap(160);
   const initH = snap(100);
   const sx = snap(x);
@@ -52,6 +45,7 @@ function createSubBlock(container, x = 10, y = 10) {
   const title = document.createElement('div');
   title.className = 'card-sub-title';
   title.contentEditable = 'true';
+  title.dataset.placeholder = '제목';
 
   const actions = document.createElement('div');
   actions.className = 'card-sub-actions';
@@ -113,11 +107,10 @@ function createSubBlock(container, x = 10, y = 10) {
   pushState();
 }
 
-// history.js에서 카드 복원 시 서브블록 추가용
 export { createSubBlock as _createSubBlock };
 
 // ═══════════════════════════════════════════════════
-//  서브블록 리사이즈 — 드래그 중 자유, 놓을 때 스냅
+//  서브블록 리사이즈
 // ═══════════════════════════════════════════════════
 function initSubResize(block, container, startX, startY) {
   const w0 = block.offsetWidth, h0 = block.offsetHeight;
@@ -131,7 +124,6 @@ function initSubResize(block, container, startX, startY) {
   }
 
   function onEnd() {
-    // 놓을 때 그리드에 스냅
     const cw = container.clientWidth;
     const ch = container.clientHeight;
     const bx = block.offsetLeft;
@@ -140,7 +132,6 @@ function initSubResize(block, container, startX, startY) {
     let finalW = snap(Math.max(MIN_W, block.offsetWidth));
     let finalH = snap(Math.max(MIN_H, block.offsetHeight));
 
-    // 컨테이너를 벗어나지 않도록 제한
     if (bx + finalW > cw) finalW = snap(Math.max(MIN_W, cw - bx));
     if (by + finalH > ch) finalH = snap(Math.max(MIN_H, ch - by));
 
@@ -166,7 +157,7 @@ function initSubResize(block, container, startX, startY) {
 }
 
 // ═══════════════════════════════════════════════════
-//  서브블록 드래그 — 드래그 중 자유, 놓을 때 스냅
+//  서브블록 드래그
 // ═══════════════════════════════════════════════════
 function initSubDrag(block, container, startX, startY) {
   const ox = block.offsetLeft, oy = block.offsetTop;
@@ -178,7 +169,6 @@ function initSubDrag(block, container, startX, startY) {
   }
 
   function onEnd() {
-    // 놓을 때 그리드에 스냅 + 컨테이너 범위 제한
     const cw = container.clientWidth;
     const ch = container.clientHeight;
     const bw = block.offsetWidth;
@@ -187,7 +177,6 @@ function initSubDrag(block, container, startX, startY) {
     let finalX = snap(block.offsetLeft);
     let finalY = snap(block.offsetTop);
 
-    // 음수 방지 & 컨테이너 밖으로 나가지 않게
     finalX = clampSnap(finalX, Math.max(0, cw - bw));
     finalY = clampSnap(finalY, Math.max(0, ch - bh));
 
@@ -211,6 +200,11 @@ function initSubDrag(block, container, startX, startY) {
   window.addEventListener('touchmove', tm, { passive: false });
   window.addEventListener('touchend', te);
 }
+
+// ═══════════════════════════════════════════════════
+//  서브블록 드래그/리사이즈 (외부 복원용 export)
+// ═══════════════════════════════════════════════════
+export { initSubDrag as _initSubDrag, initSubResize as _initSubResize };
 
 // ═══════════════════════════════════════════════════
 //  카드 윈도우 생성
