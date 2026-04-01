@@ -16,7 +16,7 @@ import { setTool } from './tools.js';
 
 /* ── 설정 ── */
 const ORB_SIZE     = 36;
-const OFFSET_X     = 30;
+const OFFSET_X     = -30;
 const OFFSET_Y     = -28;
 const LERP          = 0.15;
 const DRAG_THRESH  = 28;
