@@ -9,6 +9,8 @@
 //  UPDATE: 드래그 모드 진입 시 toolbar 확대 애니메이션
 //          선택 예정 표시 디자인 개선
 //          ★ long press 진입 추가 & move 시 orb 도망 방지
+//          ★★ long press 판정 전에는 orb 위치를 자유롭게 이동 가능
+//              일정 거리 이상 이동 시 long press 취소 (위치 이동 모드)
 // ╔══════════════════════════════════════════════════════════╗
 
 import { tool } from './state.js';
@@ -21,8 +23,9 @@ const OFFSET_Y     = -28;
 const LERP          = 0.15;
 const DRAG_THRESH  = 28;
 const DBLCLICK_MS  = 320;
-const LONGPRESS_MS = 400;    // ★ NEW: 꾹 누르기 진입 시간
+const LONGPRESS_MS = 400;
 const HIDE_DELAY   = 4000;
+const MOVE_CANCEL_DIST = 12;   // ★★ NEW: 이 거리 이상 움직이면 long press 취소 → 위치 이동 모드
 
 /* ── 전역 참조 플래그 ── */
 export let orbLock = false;
@@ -52,10 +55,19 @@ let hideTimer = null;
 /* ── Orb 위 더블클릭 감지 ── */
 let orbLastDownTime = 0;
 
-/* ── long press 감지 ── */            // ★ NEW
-let orbLongPressTimer = null;           // ★ NEW
+/* ── long press 감지 ── */
+let orbLongPressTimer = null;
 
-/* ── 드래그 모드 ── */
+/* ── ★★ NEW: Orb 위치 이동(홀드) 상태 ── */
+let orbHolding = false;           // orb를 누르고 있는 중 (아직 모드 미확정)
+let orbRelocating = false;        // long press 취소됨 → 위치 이동 모드
+let orbHoldStartX = 0;            // pointerdown 시 화면 좌표
+let orbHoldStartY = 0;
+let orbHoldOrbStartX = 0;         // pointerdown 시 orb의 current 위치
+let orbHoldOrbStartY = 0;
+let orbHoldPointerId = null;      // 추적 중인 pointer id
+
+/* ── 드래그 모드 (도구 전환) ── */
 let orbActive      = false;
 let orbDragStartX  = 0;
 let orbSteps       = 0;
@@ -98,30 +110,54 @@ function onOrbPointerDown(e) {
 
   // ── 더블탭 판정 ──
   if (now - orbLastDownTime < DBLCLICK_MS) {
-    cancelOrbLongPress();                        // ★ NEW
+    cancelOrbLongPress();
+    cancelOrbHold();
     activateOrbDrag(e);
     orbLastDownTime = 0;
-    return;                                      // ★ NEW: 더블탭이면 long press 불필요
+    return;
   }
 
   orbLastDownTime = now;
 
-  // ── long press 타이머 시작 ──                // ★ NEW 블록 시작
+  // ── ★★ 홀드 상태 시작: orb를 누르기 시작 ──
+  orbHolding = true;
+  orbRelocating = false;
+  orbHoldStartX = e.clientX;
+  orbHoldStartY = e.clientY;
+  orbHoldOrbStartX = currentX;
+  orbHoldOrbStartY = currentY;
+  orbHoldPointerId = e.pointerId;
+
+  // pointer capture for reliable tracking
+  try { orb.setPointerCapture(e.pointerId); } catch (_) {}
+
+  // ── long press 타이머 시작 ──
   cancelOrbLongPress();
   orbLongPressTimer = setTimeout(() => {
     orbLongPressTimer = null;
-    activateOrbDrag(e);
-    orbLastDownTime = 0;
+    // long press 성공 → 도구 전환 드래그 모드 진입
+    if (orbHolding && !orbRelocating) {
+      orbHolding = false;
+      activateOrbDrag(e);
+      orbLastDownTime = 0;
+    }
   }, LONGPRESS_MS);
-  // ★ NEW 블록 끝
 }
 
-/* ── long press 타이머 취소 헬퍼 ── */          // ★ NEW
+/* ── long press 타이머 취소 헬퍼 ── */
 function cancelOrbLongPress() {
   if (orbLongPressTimer) {
     clearTimeout(orbLongPressTimer);
     orbLongPressTimer = null;
   }
+}
+
+/* ── ★★ 홀드/위치이동 상태 초기화 ── */
+function cancelOrbHold() {
+  orbHolding = false;
+  orbRelocating = false;
+  orbHoldPointerId = null;
+  try { orb.releasePointerCapture(orbHoldPointerId); } catch (_) {}
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
@@ -147,6 +183,7 @@ function onGlobalDown(e) {
 }
 
 function onGlobalMove(e) {
+  // ── ★★ 도구 전환 드래그 모드 중 ──
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
@@ -156,10 +193,40 @@ function onGlobalMove(e) {
     return;
   }
 
+  // ── ★★ Orb 홀드 중 (long press 판정 대기 또는 위치 이동 모드) ──
+  if (orbHolding || orbRelocating) {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const dx = e.clientX - orbHoldStartX;
+    const dy = e.clientY - orbHoldStartY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (!orbRelocating && dist > MOVE_CANCEL_DIST) {
+      // 일정 거리 이상 움직임 → long press 취소, 위치 이동 모드로 전환
+      cancelOrbLongPress();
+      orbRelocating = true;
+    }
+
+    if (orbRelocating) {
+      // orb 위치를 손가락 따라 이동
+      const half = ORB_SIZE / 2;
+      const newX = orbHoldOrbStartX + dx;
+      const newY = orbHoldOrbStartY + dy;
+      // target과 current 모두 즉시 갱신 (lerp 없이 즉각 반영)
+      targetX = newX;
+      targetY = newY;
+      currentX = newX;
+      currentY = newY;
+      applyPosition();
+    }
+    return;
+  }
+
   if (e.target.closest('#toolbar') ||
       e.target.closest('#pen-panel') ||
       e.target.closest('#color-bar') ||
-      orb.contains(e.target)) return;          // ★ BUG FIX: orb 위 move 무시
+      orb.contains(e.target)) return;
 
   if (e.buttons > 0 || e.pointerType === 'touch') {
     targetX = e.clientX + OFFSET_X;
@@ -169,19 +236,32 @@ function onGlobalMove(e) {
 }
 
 function onGlobalUp(e) {
-  cancelOrbLongPress();                         // ★ NEW: 손 떼면 long press 취소
+  cancelOrbLongPress();
 
+  // ── ★★ 도구 전환 드래그 모드 종료 ──
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
     finishOrbDrag();
+    cancelOrbHold();
     return;
   }
+
+  // ── ★★ 홀드/위치이동 상태 종료 ──
+  if (orbHolding || orbRelocating) {
+    try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
+    orbHolding = false;
+    orbRelocating = false;
+    orbHoldPointerId = null;
+    scheduleHide(HIDE_DELAY);
+    return;
+  }
+
   scheduleHide(HIDE_DELAY);
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   드래그 모드
+   드래그 모드 (도구 전환)
    ╚══════════════════════════════════════════════════════════╝ */
 function activateOrbDrag(e) {
   orbActive = true;
@@ -298,8 +378,11 @@ function updateLabel(t) {
    애니메이션 루프
    ╚══════════════════════════════════════════════════════════╝ */
 function animLoop() {
-  currentX += (targetX - currentX) * LERP;
-  currentY += (targetY - currentY) * LERP;
+  // ★★ 위치 이동 모드에서는 lerp 건너뜀 (이미 즉시 반영됨)
+  if (!orbRelocating) {
+    currentX += (targetX - currentX) * LERP;
+    currentY += (targetY - currentY) * LERP;
+  }
   applyPosition();
   requestAnimationFrame(animLoop);
 }
