@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  contextMenu.js — 우클릭/롱프레스 컨텍스트 메뉴
 //
-//  UPDATE: 삭제/복제/z-order 변경 후 pushState()
+//  FIX: HTML의 data-action 이름과 JS 매칭 수정
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -57,8 +57,8 @@ export function initContextMenu() {
   });
   document.addEventListener('click', () => closeCtx());
 
-  // 컨텍스트 메뉴 항목 이벤트
-  document.querySelectorAll('#ctx .citem').forEach(item => {
+  // ★ FIX: HTML에서 data-action을 사용하므로 .citem[data-action] 으로 선택
+  document.querySelectorAll('#ctx .citem[data-action]').forEach(item => {
     item.addEventListener('click', e => {
       e.stopPropagation();
       ctxDo(item.dataset.action);
