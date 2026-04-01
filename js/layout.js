@@ -1,13 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  layout.js — 레이아웃 동기화 & 미니맵
 //
-//  FIX: 미니맵이 제대로 표시되지 않던 버그 수정
-//  원인: state.js에서 strokes를 let으로 선언하고 setStrokes()로
-//        재할당하면, 기존 import된 바인딩이 갱신되긴 하지만
-//        타이밍/캐싱 이슈 발생 가능.
-//        → getter 함수 getStrokes() 사용으로 변경
-//  추가: SVG 스트로크도 미니맵에 선으로 표시,
-//        뷰포트 영역 표시 개선
+//  FIX: getStrokes() getter 사용으로 바인딩 이슈 해결
 // ═══════════════════════════════════════════════════
 
 import { vp, pCvs, board, svgl, T } from './state.js';
@@ -44,19 +38,16 @@ export function updateMinimap() {
   const W = mm.width, H = mm.height;
   ctx.clearRect(0, 0, W, H);
 
-  // 배경
   ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(0, 0, W, H);
 
-  // 항상 최신 strokes를 state에서 직접 읽음
-  const strokes = S.strokes;
+  // ★ FIX: getter 함수로 항상 최신 strokes 참조
+  const strokes = S.getStrokes();
 
-  // ── 모든 콘텐츠의 바운딩 박스 계산 ──
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const elRects = [];
   const strokeRects = [];
 
-  // DOM 요소
   board.querySelectorAll('.el').forEach(el => {
     const x = parseFloat(el.style.left) || 0;
     const y = parseFloat(el.style.top) || 0;
@@ -69,7 +60,6 @@ export function updateMinimap() {
     maxY = Math.max(maxY, y + h);
   });
 
-  // SVG 스트로크
   if (strokes && strokes.length > 0) {
     strokes.forEach(s => {
       try {
@@ -87,7 +77,6 @@ export function updateMinimap() {
     });
   }
 
-  // 뷰포트 영역도 바운딩 박스에 포함
   const vpR = vp.getBoundingClientRect();
   const vpTL = { x: (0 - T.x) / T.s, y: (0 - T.y) / T.s };
   const vpBR = { x: (vpR.width - T.x) / T.s, y: (vpR.height - T.y) / T.s };
@@ -96,7 +85,6 @@ export function updateMinimap() {
   maxX = Math.max(maxX, vpBR.x);
   maxY = Math.max(maxY, vpBR.y);
 
-  // 아무 콘텐츠도 없을 때 기본 범위
   if (minX === Infinity) {
     minX = vpTL.x; minY = vpTL.y;
     maxX = vpBR.x; maxY = vpBR.y;
@@ -114,7 +102,6 @@ export function updateMinimap() {
   ctx.scale(sc, sc);
   ctx.translate(-minX, -minY);
 
-  // DOM 요소 표시
   elRects.forEach(r => {
     ctx.fillStyle = 'rgba(26,23,20,0.18)';
     ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -123,26 +110,22 @@ export function updateMinimap() {
     ctx.strokeRect(r.x, r.y, r.w, r.h);
   });
 
-  // SVG 스트로크 표시
   strokeRects.forEach(r => {
     ctx.fillStyle = 'rgba(200,75,47,0.12)';
     ctx.fillRect(r.x, r.y, r.w, r.h);
   });
 
-  // 뷰포트 영역 표시
   ctx.strokeStyle = '#c84b2f';
   ctx.lineWidth = Math.max(2 / sc, 1);
   ctx.setLineDash([6 / sc, 4 / sc]);
   ctx.strokeRect(vpTL.x, vpTL.y, vpBR.x - vpTL.x, vpBR.y - vpTL.y);
   ctx.setLineDash([]);
 
-  // 뷰포트 내부 반투명 하이라이트
   ctx.fillStyle = 'rgba(200,75,47,0.06)';
   ctx.fillRect(vpTL.x, vpTL.y, vpBR.x - vpTL.x, vpBR.y - vpTL.y);
 
   ctx.restore();
 
-  // 미니맵 테두리 표시
   ctx.strokeStyle = 'rgba(26,23,20,0.1)';
   ctx.lineWidth = 1;
   ctx.strokeRect(0, 0, W, H);
