@@ -2,6 +2,7 @@
 //  touch.js — 터치 이벤트 (1-finger, 핀치줌)
 //
 //  UPDATE: orbLock 활성 시 모든 도구 동작 차단
+//  UPDATE: 도구 사용 완료 시 scheduleRevertAfterUse 호출
 // ═══════════════════════════════════════════════════
 
 import * as S from './state.js';
@@ -13,7 +14,7 @@ import { addText } from './text.js';
 import { updateMinimap } from './layout.js';
 import { focusEditableTouch } from './edit.js';
 import { pushState } from './history.js';
-import { orbLock } from './toolOrb.js';  // ← NEW
+import { orbLock, scheduleRevertAfterUse } from './toolOrb.js';
 
 function cancelSingleFingerActions() {
   if (S.drawing) {
@@ -31,7 +32,7 @@ function cancelSingleFingerActions() {
 
 export function initTouchEvents() {
   S.vp.addEventListener('touchstart', e => {
-    if (orbLock) { e.preventDefault(); return; }   // ★ 차단
+    if (orbLock) { e.preventDefault(); return; }
     cancelLongPress();
     if (e.touches.length === 2) {
       cancelSingleFingerActions();
@@ -82,7 +83,7 @@ export function initTouchEvents() {
   }, { passive: false });
 
   window.addEventListener('touchmove', e => {
-    if (orbLock) { e.preventDefault(); return; }   // ★ 차단
+    if (orbLock) { e.preventDefault(); return; }
 
     if (e.touches.length === 2 && S.pinchActive) {
       e.preventDefault();
@@ -135,7 +136,7 @@ export function initTouchEvents() {
   }, { passive: false });
 
   window.addEventListener('touchend', e => {
-    if (orbLock) return;   // ★ 차단
+    if (orbLock) return;
     cancelLongPress();
     document.body.classList.remove('panning');
 
@@ -157,5 +158,8 @@ export function initTouchEvents() {
       }
       S.setShapeA(null);
     }
+
+    // ★ 도구 사용 완료 → pan 복귀 스케줄
+    scheduleRevertAfterUse();
   });
 }
