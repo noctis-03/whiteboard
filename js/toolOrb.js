@@ -305,14 +305,14 @@ function onGlobalUp(e) {
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   ★ 외부에서 호출 — 도구 사용 완료 후 pan 복귀 스케줄
+   ★ 외부에서 호출 — 도구 사용 완료 후 처리
       (touch.js에서 touchend 시 호출)
+      ★ 변경: 사용 후 즉시 pan 복귀하지 않고,
+             Orb 타이머만 리셋. Orb가 사라질 때 pan 복귀.
    ╚══════════════════════════════════════════════════════════╝ */
 export function scheduleRevertAfterUse() {
   if (!pendingTool || !toolActivated) return;
-  revertToPan();
-  toolActivated = false;
-  if (orb) orb.classList.remove('orb-tool-active');
+  // 도구는 활성 상태 유지 — Orb 타이머만 리셋
   scheduleHide(HIDE_DELAY);
 }
 
