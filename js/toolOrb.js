@@ -1,14 +1,15 @@
-// ═══════════════════════════════════════════════════
-//  toolOrb.js — 포인터 근처에 따라다니는 원(Orb)
+// ╔══════════════════════════════════════════════════════════╗
+//  toolOrb.js — 포인터를 따라다니는 원(Orb)
 //
-//  · 입력 위치의 오른쪽 위에 부드럽게 따라다님
-//  · Orb 위에서 더블클릭+홀드 → 좌우 드래그로 도구 전환
+//  · 입력 위치의 오른쪽 위에 부드럽게 떠다님
+//  · Orb 위에서 꾹 누르기 또는 더블클릭+홀드 → 좌우 드래그로 도구 전환
 //  · 드래그 중에는 캔버스 도구 동작 완전 차단
-//  · 손을 때면 해당 도구 확정
+//  · 손을 떼면 해당 도구 확정
 //
 //  UPDATE: 드래그 모드 진입 시 toolbar 확대 애니메이션
 //          선택 예정 표시 디자인 개선
-// ═══════════════════════════════════════════════════
+//          ★ long press 진입 추가 & move 시 orb 도망 방지
+// ╔══════════════════════════════════════════════════════════╗
 
 import { tool } from './state.js';
 import { setTool } from './tools.js';
@@ -17,12 +18,13 @@ import { setTool } from './tools.js';
 const ORB_SIZE     = 36;
 const OFFSET_X     = 30;
 const OFFSET_Y     = -28;
-const LERP         = 0.15;
+const LERP          = 0.15;
 const DRAG_THRESH  = 28;
 const DBLCLICK_MS  = 320;
+const LONGPRESS_MS = 400;    // ★ NEW: 꾹 누르기 진입 시간
 const HIDE_DELAY   = 4000;
 
-/* ── 전역 차단 플래그 ── */
+/* ── 전역 참조 플래그 ── */
 export let orbLock = false;
 
 /* ── 도구 순서 ── */
@@ -50,16 +52,19 @@ let hideTimer = null;
 /* ── Orb 위 더블클릭 감지 ── */
 let orbLastDownTime = 0;
 
+/* ── long press 감지 ── */            // ★ NEW
+let orbLongPressTimer = null;           // ★ NEW
+
 /* ── 드래그 모드 ── */
-let orbActive     = false;
-let orbDragStartX = 0;
-let orbSteps      = 0;
-let orbBaseIdx    = 0;
+let orbActive      = false;
+let orbDragStartX  = 0;
+let orbSteps       = 0;
+let orbBaseIdx     = 0;
 let orbPreviewTool = '';
 
-/* ═══════════════════════════════════════════════════
+/* ╔══════════════════════════════════════════════════════════╗
    초기화
-═══════════════════════════════════════════════════ */
+   ╚══════════════════════════════════════════════════════════╝ */
 export function initToolOrb() {
   orb = document.createElement('div');
   orb.id = 'tool-orb';
@@ -82,25 +87,46 @@ export function initToolOrb() {
   updateLabel(tool);
 }
 
-/* ═══════════════════════════════════════════════════
+/* ╔══════════════════════════════════════════════════════════╗
    Orb 위 포인터 다운
-═══════════════════════════════════════════════════ */
+   ╚══════════════════════════════════════════════════════════╝ */
 function onOrbPointerDown(e) {
   e.stopPropagation();
   e.preventDefault();
 
   const now = Date.now();
+
+  // ── 더블탭 판정 ──
   if (now - orbLastDownTime < DBLCLICK_MS) {
+    cancelOrbLongPress();                        // ★ NEW
     activateOrbDrag(e);
     orbLastDownTime = 0;
-  } else {
-    orbLastDownTime = now;
+    return;                                      // ★ NEW: 더블탭이면 long press 불필요
+  }
+
+  orbLastDownTime = now;
+
+  // ── long press 타이머 시작 ──                // ★ NEW 블록 시작
+  cancelOrbLongPress();
+  orbLongPressTimer = setTimeout(() => {
+    orbLongPressTimer = null;
+    activateOrbDrag(e);
+    orbLastDownTime = 0;
+  }, LONGPRESS_MS);
+  // ★ NEW 블록 끝
+}
+
+/* ── long press 타이머 취소 헬퍼 ── */          // ★ NEW
+function cancelOrbLongPress() {
+  if (orbLongPressTimer) {
+    clearTimeout(orbLongPressTimer);
+    orbLongPressTimer = null;
   }
 }
 
-/* ═══════════════════════════════════════════════════
+/* ╔══════════════════════════════════════════════════════════╗
    전역 포인터 이벤트
-═══════════════════════════════════════════════════ */
+   ╚══════════════════════════════════════════════════════════╝ */
 function onGlobalDown(e) {
   if (orbActive) {
     if (!orb.contains(e.target)) {
@@ -130,11 +156,10 @@ function onGlobalMove(e) {
     return;
   }
 
-    if (e.target.closest('#toolbar') ||
+  if (e.target.closest('#toolbar') ||
       e.target.closest('#pen-panel') ||
       e.target.closest('#color-bar') ||
-      orb.contains(e.target)) return;
-
+      orb.contains(e.target)) return;          // ★ BUG FIX: orb 위 move 무시
 
   if (e.buttons > 0 || e.pointerType === 'touch') {
     targetX = e.clientX + OFFSET_X;
@@ -144,6 +169,8 @@ function onGlobalMove(e) {
 }
 
 function onGlobalUp(e) {
+  cancelOrbLongPress();                         // ★ NEW: 손 떼면 long press 취소
+
   if (orbActive) {
     e.stopPropagation();
     e.preventDefault();
@@ -153,9 +180,9 @@ function onGlobalUp(e) {
   scheduleHide(HIDE_DELAY);
 }
 
-/* ═══════════════════════════════════════════════════
+/* ╔══════════════════════════════════════════════════════════╗
    드래그 모드
-═══════════════════════════════════════════════════ */
+   ╚══════════════════════════════════════════════════════════╝ */
 function activateOrbDrag(e) {
   orbActive = true;
   orbLock   = true;
@@ -234,9 +261,9 @@ function clearPreviewHighlight() {
   document.querySelectorAll('.orb-preview').forEach(b => b.classList.remove('orb-preview'));
 }
 
-/* ═══════════════════════════════════════════════════
-   표시 / 숨김 / 레이블
-═══════════════════════════════════════════════════ */
+/* ╔══════════════════════════════════════════════════════════╗
+   표시 / 숨기기 / 레이블
+   ╚══════════════════════════════════════════════════════════╝ */
 function showOrb() {
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
   if (!visible) {
@@ -267,9 +294,9 @@ function updateLabel(t) {
   orbLabel.textContent = map[t] || t.charAt(0).toUpperCase();
 }
 
-/* ═══════════════════════════════════════════════════
+/* ╔══════════════════════════════════════════════════════════╗
    애니메이션 루프
-═══════════════════════════════════════════════════ */
+   ╚══════════════════════════════════════════════════════════╝ */
 function animLoop() {
   currentX += (targetX - currentX) * LERP;
   currentY += (targetY - currentY) * LERP;
