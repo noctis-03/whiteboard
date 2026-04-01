@@ -1,11 +1,12 @@
 // ╔══════════════════════════════════════════════════════════╗
 //  toolOrb.js — 포인터를 따라다니는 원(Orb)
 //
-//  · 터치 환경: 도구 선택 → pan 기본 → Orb 탭 → 도구 활성화
-//  · Orb 숨김 시 → pan 복귀
-//  · 꾹 누르기/더블탭 → 좌우 드래그로 도구 전환
-//  · 왼쪽 순간이동 / 오른쪽 빠른 lerp
-//  · long press 판정 전 위치 이동 가능
+//  ★ 변경: Orb 탭이 아니라 화면 아무 곳 탭으로 도구 활성화
+//  · 터치 환경: 도구 선택 → pan 기본 → 화면 탭 → 도구 활성화
+//  · 활성화 후 한 번 사용하면 자동 pan 복귀
+//  · Orb 표시 중: 탭 = 도구 활성화, 드래그 = pan 이동
+//  · Orb 사라진 후: 탭 = 도구 활성화, 드래그 = pan 이동
+//  · 꾹 누르기/더블탭 (Orb 위) → 좌우 드래그로 도구 전환
 // ╔══════════════════════════════════════════════════════════╗
 
 import { tool, pendingTool } from './state.js';
@@ -22,8 +23,15 @@ const LONGPRESS_MS = 400;
 const HIDE_DELAY   = 4000;
 const MOVE_CANCEL_DIST = 12;
 
+/* ── 탭 판정용 상수 ── */
+const TAP_MOVE_THRESH = 10;   // 이 거리 이상 움직이면 탭이 아님
+const TAP_TIME_THRESH = 250;  // 이 시간(ms) 이내에 떼야 탭
+
 /* ── 전역 참조 플래그 ── */
 export let orbLock = false;
+
+/* ── 도구 활성화 상태 (외부에서 참조) ── */
+export let toolActivated = false;
 
 /* ── 도구 순서 ── */
 function getToolOrder() {
@@ -69,15 +77,45 @@ let orbSteps       = 0;
 let orbBaseIdx     = 0;
 let orbPreviewTool = '';
 
-/* ── ★ 도구 활성화 상태 (터치) ── */
-let toolActivated = false;     // 예약 도구가 현재 활성화 되어있는지
+/* ── ★ 화면 탭 감지용 상태 ── */
+let screenTapStartX = 0;
+let screenTapStartY = 0;
+let screenTapStartTime = 0;
+let screenTapTracking = false;
 
 /* ╔══════════════════════════════════════════════════════════╗
    외부에서 호출: 도구 변경 알림 (tools.js → toolOrb.js)
    ╚══════════════════════════════════════════════════════════╝ */
 export function notifyToolChanged(t) {
   updateLabel(t);
-  toolActivated = false;    // 새 도구 선택 시 활성화 초기화
+  toolActivated = false;
+}
+
+/* ╔══════════════════════════════════════════════════════════╗
+   ★ 외부에서 호출: 화면 탭으로 도구 활성화 시도
+      (touch.js의 touchstart에서 호출)
+      true를 반환하면 도구가 활성화됨 → touch.js에서 도구 동작 시작
+      false를 반환하면 활성화 안 됨 → pan 동작
+   ╚══════════════════════════════════════════════════════════╝ */
+export function tryActivateByTap() {
+  if (!pendingTool) return false;
+  if (toolActivated) return true; // 이미 활성화 상태
+
+  // 활성화!
+  activatePending();
+  toolActivated = true;
+  if (orb) orb.classList.add('orb-tool-active');
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  return true;
+}
+
+/* ╔══════════════════════════════════════════════════════════╗
+   ★ 외부에서 호출: 화면 탭이 아닌 것으로 판명 (드래그 시작)
+      → 도구 활성화 취소, pan 유지
+   ╚══════════════════════════════════════════════════════════╝ */
+export function cancelTapActivation() {
+  // 이번 터치에서 도구가 활성화됐지만 아직 그리기 시작 전이면 취소
+  // (실제로는 touch.js에서 드래그로 판명 시 호출)
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
@@ -243,30 +281,14 @@ function onGlobalUp(e) {
     return;
   }
 
-  // ── Orb 위에서 손 뗌 (홀드 중, 위치 이동 아님) → ★ 단일 탭 = 도구 활성화 ──
+  // ── Orb 위에서 손 뗌 (홀드 중, 위치 이동 아님) → Orb 탭 (도구 전환용은 아님) ──
   if (orbHolding && !orbRelocating) {
     try { orb.releasePointerCapture(e.pointerId); } catch (_) {}
     orbHolding = false;
     orbHoldPointerId = null;
-
-    // ★ 예약 도구가 있으면 활성화 토글
-    if (pendingTool) {
-      if (!toolActivated) {
-        // 예약 도구 활성화
-        activatePending();
-        toolActivated = true;
-        orb.classList.add('orb-tool-active');
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        // 도구 활성 중에는 Orb를 계속 표시하되, 일정 시간 후 자동 해제
-        // (touchend에서 도구 사용 완료 후 스케줄됨)
-      } else {
-        // 이미 활성화 → 비활성화 (pan 복귀)
-        revertToPan();
-        toolActivated = false;
-        orb.classList.remove('orb-tool-active');
-        scheduleHide(HIDE_DELAY);
-      }
-    }
+    // Orb 탭은 이제 도구 활성화에 사용하지 않음 (화면 탭이 대신함)
+    // 대신 Orb 탭 → 아무 동작 없음 (또는 향후 기능 추가 가능)
+    scheduleHide(HIDE_DELAY);
     return;
   }
 
@@ -283,15 +305,14 @@ function onGlobalUp(e) {
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
-   ★ NEW: 외부에서 호출 — 도구 사용 완료 후 pan 복귀 스케줄
-          (touch.js에서 touchend 시 호출)
+   ★ 외부에서 호출 — 도구 사용 완료 후 pan 복귀 스케줄
+      (touch.js에서 touchend 시 호출)
    ╚══════════════════════════════════════════════════════════╝ */
 export function scheduleRevertAfterUse() {
   if (!pendingTool || !toolActivated) return;
   revertToPan();
   toolActivated = false;
-  orb.classList.remove('orb-tool-active');
-  // Orb는 계속 보이되 타이머 후 사라짐 → 사라지면 pan 유지
+  if (orb) orb.classList.remove('orb-tool-active');
   scheduleHide(HIDE_DELAY);
 }
 
@@ -304,7 +325,6 @@ function activateOrbDrag(e) {
   orbDragStartX = e.clientX;
   orbSteps = 0;
 
-  // 드래그 전환 시 기준 도구: pendingTool이 있으면 그것, 아니면 tool
   const baseTool = pendingTool || tool;
   const order = getToolOrder();
   orbBaseIdx = order.indexOf(baseTool);
@@ -351,13 +371,13 @@ function finishOrbDrag() {
   if (tb) tb.classList.remove('tb-orb-zoom');
 
   if (orbPreviewTool) {
-    setTool(orbPreviewTool);   // setTool이 터치 환경이면 자동으로 pendingTool에 예약
+    setTool(orbPreviewTool);
   }
 
   clearPreviewHighlight();
   updateLabel(orbPreviewTool || pendingTool || tool);
   toolActivated = false;
-  orb.classList.remove('orb-tool-active');
+  if (orb) orb.classList.remove('orb-tool-active');
   scheduleHide(HIDE_DELAY);
 }
 
@@ -399,8 +419,8 @@ function scheduleHide(ms) {
     orb.classList.remove('orb-visible');
     orb.classList.remove('orb-tool-active');
 
-    // ★ Orb가 사라지면 → pan 복귀
-    if (pendingTool && toolActivated) {
+    // Orb가 사라져도 pendingTool은 유지 (화면 탭으로 다시 활성화 가능)
+    if (toolActivated) {
       revertToPan();
       toolActivated = false;
     }
