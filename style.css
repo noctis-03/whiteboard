@@ -517,39 +517,40 @@ body[data-tool="edit"] #viewport .el .h-resize{pointer-events:none;}
 
 
 /* ══════════════════════════════════════════════════════
-   선택 예정(미리보기) 표시 — 리디자인
+   선택 예정(미리보기) 표시 — 고스트 오버레이 방식
 ══════════════════════════════════════════════════════ */
 
-/* ★ zoom 모드: toolbar와 tb-tools 모두 overflow visible로 풀어
-   scaled preview 버튼이 위아래로 잘리지 않게 함.
-   가로 스크롤은 JS(scrollLeft)로 직접 제어. */
-#toolbar.tb-orb-zoom {
-  overflow: visible;
-}
-#toolbar.tb-orb-zoom #tb-tools {
-  overflow: visible;
-}
+/* tb-tools는 항상 정상 스크롤 유지 — overflow 해킹 없음 */
 
-.tbtn.orb-preview {
-  background: var(--ink) !important;
-  color: var(--panel) !important;
-  transform: scale(1.18);
+/* 고스트 오버레이: body에 fixed로 붙어 어떤 부모도 클리핑 안 함 */
+#orb-preview-ghost {
+  display: none;
+  position: fixed;
+  transform: translate(-50%, -50%) scale(1.22);
+  transform-origin: center center;
+  z-index: 2000;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   border-radius: 10px;
-  z-index: 10;
-  /* box-shadow 대신 outline 사용 — overflow에 영향 안 받음 */
+  background: var(--ink);
+  color: var(--panel);
   outline: 2.5px solid var(--accent2);
   outline-offset: 2px;
-  box-shadow: 0 4px 14px rgba(26, 23, 20, 0.22);
-  transition: transform .15s cubic-bezier(.34,1.56,.64,1),
-              background .12s, color .12s, box-shadow .15s,
-              outline-color .12s;
+  box-shadow: 0 4px 18px rgba(26, 23, 20, 0.28);
+  transition: transform .15s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+#orb-preview-ghost.orb-preview-ghost-active {
+  display: flex;
 }
 
 /* 하단 도트 인디케이터 */
-.tbtn.orb-preview::before {
+#orb-preview-ghost.orb-preview-ghost-active::before {
   content: '';
   position: absolute;
-  bottom: -6px;
+  bottom: -8px;
   left: 50%;
   transform: translateX(-50%);
   width: 6px;
