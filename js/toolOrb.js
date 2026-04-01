@@ -12,6 +12,9 @@
 import { tool, pendingTool } from './state.js';
 import { setTool, activatePending, revertToPan } from './tools.js';
 
+/* ── Orb를 표시하지 않을 도구 목록 (text/edit, pan, select/lasso) ── */
+const NO_ORB_TOOLS = new Set(['text', 'edit', 'pan', 'select']);
+
 /* ── 설정 ── */
 const ORB_SIZE     = 36;
 const OFFSET_X     = -30;
@@ -33,7 +36,7 @@ export let orbLock = false;
 /* ── 도구 활성화 상태 (외부에서 참조) ── */
 export let toolActivated = false;
 
-/* ── 도구 순서 ── */
+/* ── 도구 순서 (Orb 드래그 전환용 — no-orb 도구 제외) ── */
 function getToolOrder() {
   const btns = document.querySelectorAll(
     '#tb-tools .tbtn[data-tool], #tb-tools .tbtn[data-tool-or-panel]'
@@ -41,7 +44,7 @@ function getToolOrder() {
   const order = [];
   btns.forEach(btn => {
     const t = btn.dataset.tool || btn.dataset.toolOrPanel;
-    if (t && !order.includes(t)) order.push(t);
+    if (t && !order.includes(t) && !NO_ORB_TOOLS.has(t)) order.push(t);
   });
   return order;
 }
@@ -88,7 +91,13 @@ let screenTapTracking = false;
    ╚══════════════════════════════════════════════════════════╝ */
 export function notifyToolChanged(t) {
   updateLabel(t);
+  // 도구 전환 시 활성화 상태 완전 초기화
   toolActivated = false;
+  if (orb) orb.classList.remove('orb-tool-active');
+  // Orb가 불필요한 도구로 전환되면 즉시 숨김
+  if (NO_ORB_TOOLS.has(t)) {
+    hideOrbNow();
+  }
 }
 
 /* ╔══════════════════════════════════════════════════════════╗
@@ -219,6 +228,10 @@ function onGlobalDown(e) {
       e.target.closest('#color-bar') ||
       orb.contains(e.target)) return;
 
+  // Orb가 필요 없는 도구일 때는 표시하지 않음
+  const activeTool = pendingTool || tool;
+  if (NO_ORB_TOOLS.has(activeTool)) return;
+
   targetX = e.clientX + OFFSET_X;
   targetY = e.clientY + OFFSET_Y;
   showOrb();
@@ -265,6 +278,8 @@ function onGlobalMove(e) {
       orb.contains(e.target)) return;
 
   if (e.buttons > 0 || e.pointerType === 'touch') {
+    const activeTool = pendingTool || tool;
+    if (NO_ORB_TOOLS.has(activeTool)) return;
     targetX = e.clientX + OFFSET_X;
     targetY = e.clientY + OFFSET_Y;
     showOrb();
@@ -452,6 +467,16 @@ function showOrb() {
     currentY = targetY;
     applyPosition();
   }
+}
+
+function hideOrbNow() {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  visible = false;
+  if (orb) {
+    orb.classList.remove('orb-visible');
+    orb.classList.remove('orb-tool-active');
+  }
+  clearPreviewHighlight();
 }
 
 function scheduleHide(ms) {
