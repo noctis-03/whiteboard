@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  state.js — 전역 상태 & DOM 참조
+//
+//  UPDATE: pendingTool (터치 환경 예약 도구) 추가
 // ═══════════════════════════════════════════════════
 
 // DOM references
@@ -23,6 +25,10 @@ export let sw    = 2;
 export function setToolState(t)  { tool = t; }
 export function setColorState(c) { color = c; }
 export function setSwState(v)    { sw = v; }
+
+// ★ NEW: 터치 환경 예약 도구 — 화면에서 탭 전까지 대기하는 도구
+export let pendingTool = null;
+export function setPendingTool(v) { pendingTool = v; }
 
 // Pen config
 export const penCfg = { smooth: 0, opacity: 100, cap: 'round', pressure: 'none' };
